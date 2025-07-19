@@ -1,0 +1,553 @@
+Project Blueprint: Forensic Clueword Extractor on ReplitThis guide provides a detailed, step-by-step plan to create, configure, and run the complete web-based Forensic Clueword Extractor application within the Replit.ai environment.Part 1: Setting Up Your Replit EnvironmentReplit simplifies setup, but a few key steps are required to ensure the audio processing works correctly.Create a New Repl:Log in to your Replit account.Click the + Create Repl button.In the template search box, type Python and select the official Python template.Give your Repl a title, for example, Forensic-Audio-Suite.Click Create Repl.Configure the Repl for FFmpeg:pydub requires a system library called FFmpeg to handle different audio formats like MP3. We need to tell Replit to install it.On the left side of your Repl, click the "Shell" tab.In the shell window, type the following command and press Enter:nix-shell -p ffmpeg --run "echo ffmpeg is available"
+This command is not quite right for making it permanently available. Instead, we will configure the replit.nix file.Click the ... icon in the file explorer and select "Show hidden files".Click on the replit.nix file to open it.Modify the deps list to include pkgs.ffmpeg. It should look like this:{ pkgs }: {
+  deps = [
+    pkgs.python310Full
+    pkgs.ffmpeg  # Add this line
+  ];
+}
+After saving the file, click back into the "Shell" tab and type exit and press Enter, then reopen the shell to apply the changes, or simply restart the Repl by stopping and running it again.Install Python Packages:On the left sidebar, click the "Packages" icon (it looks like a cube).In the search box, type Flask and click the + button to install it.Repeat this process for the following packages:pydubpython-docxPart 2: Creating the Project File StructureIn the "Files" tab on the left, create the folders and files to match this structure exactly.To create a folder, click the "Add folder" icon at the top of the file explorer.To create a file, click the "Add file" icon.your-repl-name/
+│
+├── app.py                  # Main Python server file (will be created automatically)
+│
+├── static/                 # Create this folder
+│   ├── css/                # Create this subfolder
+│   │   └── style.css       # Create this file
+│   └── js/                 # Create this subfolder
+│       └── main.js         # Create this file
+│
+└── templates/              # Create this folder
+    └── index.html          # Create this file
+Part 3: The Code (File by File)Copy and paste the following code blocks into their corresponding files in your Replit project.File: app.pyimport os
+import json
+import shutil
+import zipfile
+from datetime import datetime
+from flask import Flask, render_template, request, send_file, jsonify
+from pydub import AudioSegment
+from docx import Document
+
+# --- Flask App Initialization ---
+app = Flask(__name__)
+
+# --- Configuration ---
+# Define paths for file storage.
+UPLOAD_FOLDER = 'uploads'
+STANDARDIZED_FOLDER = os.path.join('static', 'temp_standardized')
+OUTPUT_FOLDER = 'output'
+
+# --- Helper function to clean up directories ---
+def clear_directory(folder_path):
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path, exist_ok=True)
+        return
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.unlink(file_path)
+        elif os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+
+# --- Main Route to Serve the Web Interface ---
+@app.route('/')
+def index():
+    """Renders the main HTML page and clears old session data."""
+    # Clean up directories for a fresh session.
+    for folder in [UPLOAD_FOLDER, STANDARDIZED_FOLDER, OUTPUT_FOLDER]:
+        clear_directory(folder)
+    # Clear the root-level zip file if it exists
+    if os.path.exists('clueword_analysis.zip'):
+        os.remove('clueword_analysis.zip')
+        
+    return render_template('index.html')
+
+# --- Route for Standardizing Audio ---
+@app.route('/standardize', methods=['POST'])
+def standardize_audio():
+    """
+    Receives an audio file, converts it to a standard format,
+    and returns the path to the new file.
+    """
+    try:
+        if 'audio_file' not in request.files:
+            return jsonify({"error": "No audio file provided."}), 400
+        
+        file = request.files['audio_file']
+        panel_type = request.form.get('type') # 'question' or 'control'
+        
+        original_filename = f"{panel_type}_original"
+        original_path = os.path.join(UPLOAD_FOLDER, original_filename)
+        file.save(original_path)
+        
+        audio = AudioSegment.from_file(original_path)
+        standardized_audio = audio.set_frame_rate(44100).set_channels(1).set_sample_width(2)
+        
+        standardized_filename = f"{panel_type}_standardized.wav"
+        standardized_path = os.path.join(STANDARDIZED_FOLDER, standardized_filename)
+        standardized_audio.export(standardized_path, format="wav")
+        
+        return jsonify({
+            "success": True,
+            "url": f"/static/temp_standardized/{standardized_filename}",
+            "original_filename": file.filename
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- Route for Final Processing ---
+@app.route('/process', methods=['POST'])
+def process_audio():
+    """
+    Receives annotation data and generates the final cluewords package.
+    """
+    try:
+        annotations = json.loads(request.form.get('annotations'))
+        q_annotations = annotations.get('question', [])
+        c_annotations = annotations.get('control', [])
+        
+        q_original_filename = request.form.get('question_original_filename')
+        c_original_filename = request.form.get('control_original_filename')
+
+        q_audio = AudioSegment.from_file(os.path.join(UPLOAD_FOLDER, "question_original"))
+        c_audio = AudioSegment.from_file(os.path.join(UPLOAD_FOLDER, "control_original"))
+
+        report_data = []
+        matches_found = 0
+        control_map = {ann['label'].lower().strip(): ann for ann in c_annotations}
+
+        clear_directory(OUTPUT_FOLDER)
+
+        for q_ann in q_annotations:
+            q_label_clean = q_ann['label'].lower().strip()
+            if q_label_clean in control_map:
+                matches_found += 1
+                c_ann = control_map[q_label_clean]
+                
+                safe_label = "".join(c for c in q_ann['label'] if c.isalnum() or c in (' ', '_')).rstrip()
+                clueword_dir = os.path.join(OUTPUT_FOLDER, safe_label)
+                os.makedirs(clueword_dir, exist_ok=True)
+
+                q_start_ms = float(q_ann['start']) * 1000
+                q_end_ms = float(q_ann['end']) * 1000
+                q_seg = q_audio[q_start_ms:q_end_ms].set_channels(1).set_frame_rate(44100)
+                q_seg.export(os.path.join(clueword_dir, "question.wav"), format="wav")
+                report_data.append(["Question", q_ann['label'], q_start_ms, q_end_ms, q_end_ms - q_start_ms])
+
+                c_start_ms = float(c_ann['start']) * 1000
+                c_end_ms = float(c_ann['end']) * 1000
+                c_seg = c_audio[c_start_ms:c_end_ms].set_channels(1).set_frame_rate(44100)
+                c_seg.export(os.path.join(clueword_dir, "control.wav"), format="wav")
+                report_data.append(["Control", c_ann['label'], c_start_ms, c_end_ms, c_end_ms - c_start_ms])
+        
+        if matches_found == 0:
+            return jsonify({"error": "No matching annotations found."}), 400
+
+        create_report(report_data, OUTPUT_FOLDER, q_original_filename, c_original_filename)
+
+        zip_path = 'clueword_analysis.zip'
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for root, _, files in os.walk(OUTPUT_FOLDER):
+                for file in files:
+                    zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), OUTPUT_FOLDER))
+        
+        return send_file(zip_path, as_attachment=True)
+
+    except Exception as e:
+        return jsonify({"error": "An internal server error occurred during final processing."}), 500
+
+def create_report(data, output_dir, q_filename, c_filename):
+    """Generates a .docx report."""
+    doc = Document()
+    doc.add_heading('Forensic Clueword Analysis Report', 0)
+    doc.add_paragraph(f"Report generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    doc.add_paragraph(f"Original Question File: {q_filename}")
+    doc.add_paragraph(f"Original Control File: {c_filename}")
+    doc.add_paragraph()
+    table = doc.add_table(rows=1, cols=5, style='Table Grid')
+    hdr_cells = table.rows[0].cells
+    headers = ['Source File', 'Clueword', 'Start Time (ms)', 'End Time (ms)', 'Duration (ms)']
+    for i, header in enumerate(headers):
+        hdr_cells[i].text = header
+    for item in data:
+        row_cells = table.add_row().cells
+        for i, val in enumerate(item):
+            row_cells[i].text = f"{val:.2f}" if isinstance(val, float) else str(val)
+    doc.save(os.path.join(output_dir, "analysis_report.docx"))
+
+# --- Run the Application ---
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+File: templates/index.html<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forensic Clueword Extractor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Load WaveSurfer.js and Regions Plugin from CDN -->
+    <script src="https://unpkg.com/wavesurfer.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js/dist/plugin/wavesurfer.regions.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Forensic Clueword Extractor</h1>
+    </header>
+
+    <main class="container">
+        <!-- Question Audio Panel -->
+        <div class="audio-panel" id="question-panel">
+            <h2>Question Audio</h2>
+            <div class="file-loader">
+                <input type="file" id="question-file-input" accept="audio/*">
+                <label for="question-file-input" class="file-label">Choose File</label>
+                <span id="question-filename" class="filename">No file selected</span>
+            </div>
+            <div id="question-waveform" class="waveform-container"></div>
+            <div class="zoom-controls">
+                <button id="q-zoom-in">+</button>
+                <button id="q-zoom-out">-</button>
+            </div>
+        </div>
+
+        <!-- Control Audio Panel -->
+        <div class="audio-panel" id="control-panel">
+            <h2>Control Audio</h2>
+            <div class="file-loader">
+                <input type="file" id="control-file-input" accept="audio/*">
+                <label for="control-file-input" class="file-label">Choose File</label>
+                <span id="control-filename" class="filename">No file selected</span>
+            </div>
+            <div id="control-waveform" class="waveform-container"></div>
+             <div class="zoom-controls">
+                <button id="c-zoom-in">+</button>
+                <button id="c-zoom-out">-</button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <button id="generate-button">Generate CLUE WORDS</button>
+        <div id="status-area">Ready</div>
+    </footer>
+
+    <!-- Our custom application logic -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
+File: static/css/style.css:root {
+    --bg-color: #1a1a1d;
+    --panel-bg-color: #2c2f33;
+    --primary-color: #4a90e2;
+    --primary-hover-color: #5aa1f2;
+    --text-color: #e1e1e1;
+    --text-muted-color: #99aab5;
+    --border-color: #4e4e52;
+    --waveform-color: #4a90e2;
+    --waveform-progress-color: #87b6ec;
+    --region-color: rgba(230, 74, 25, 0.2);
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+header {
+    background-color: var(--panel-bg-color);
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+    text-align: center;
+}
+
+h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--primary-color);
+}
+
+h2 {
+    color: var(--text-color);
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 0.5rem;
+    margin-top: 0;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    padding: 2rem;
+    flex-grow: 1;
+}
+
+.audio-panel {
+    background-color: var(--panel-bg-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.file-loader {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+.file-label {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0.6rem 1.2rem;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-weight: 500;
+}
+
+.file-label:hover {
+    background-color: var(--primary-hover-color);
+}
+
+.filename {
+    color: var(--text-muted-color);
+    font-style: italic;
+}
+
+.waveform-container {
+    width: 100%;
+    height: 150px;
+    background-color: #16181a;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+}
+
+.zoom-controls {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.zoom-controls button {
+    background-color: #3a3d41;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    width: 30px;
+    height: 30px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.zoom-controls button:hover {
+    background-color: #4e4e52;
+}
+
+footer {
+    background-color: var(--panel-bg-color);
+    padding: 1rem 2rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem;
+    position: sticky;
+    bottom: 0;
+}
+
+#generate-button {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    padding: 0.8rem 2rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#generate-button:hover:not(:disabled) {
+    background-color: #218838;
+}
+
+#generate-button:disabled {
+    background-color: #5a6268;
+    cursor: not-allowed;
+}
+
+#status-area {
+    background-color: var(--bg-color);
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    color: var(--text-muted-color);
+    min-width: 200px;
+    text-align: center;
+}
+File: static/js/main.jsdocument.addEventListener('DOMContentLoaded', function () {
+    const appState = {
+        question: { wavesurfer: null, original_filename: null },
+        control: { wavesurfer: null, original_filename: null }
+    };
+
+    const statusArea = document.getElementById('status-area');
+    const generateButton = document.getElementById('generate-button');
+
+    const createWaveSurfer = (containerId) => {
+        return WaveSurfer.create({
+            container: containerId,
+            waveColor: '#4a90e2',
+            progressColor: '#87b6ec',
+            cursorColor: '#e34c19',
+            barWidth: 3,
+            barRadius: 3,
+            responsive: true,
+            height: 150,
+            normalize: true,
+            plugins: [
+                WaveSurfer.regions.create({
+                    regionsMinLength: 0.1,
+                    dragSelection: { slop: 5 },
+                    color: 'rgba(230, 74, 25, 0.2)'
+                })
+            ]
+        });
+    };
+
+    const setupPanel = (type) => {
+        const ws = createWaveSurfer(`#${type}-waveform`);
+        appState[type].wavesurfer = ws;
+
+        const fileInput = document.getElementById(`${type}-file-input`);
+        const filenameSpan = document.getElementById(`${type}-filename`);
+
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            filenameSpan.textContent = `Standardizing ${file.name}...`;
+            statusArea.textContent = `Uploading and standardizing...`;
+            generateButton.disabled = true;
+
+            const formData = new FormData();
+            formData.append('audio_file', file);
+            formData.append('type', type);
+
+            try {
+                const response = await fetch('/standardize', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                if (data.success) {
+                    filenameSpan.textContent = data.original_filename;
+                    appState[type].original_filename = data.original_filename;
+                    statusArea.textContent = 'Loading waveform...';
+                    ws.load(data.url);
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                console.error('Error during standardization:', error);
+                statusArea.textContent = `Error: ${error.message}`;
+                filenameSpan.textContent = 'Failed to load.';
+            }
+        });
+
+        ws.on('ready', () => {
+            statusArea.textContent = 'Ready';
+            generateButton.disabled = false;
+            ws.enableDragSelection({});
+        });
+
+        ws.on('region-created', (region) => {
+            const label = prompt('Enter clueword label for this region:');
+            if (label && label.trim() !== '') {
+                region.data = { label: label.trim() };
+                const regionEl = region.element;
+                const labelEl = document.createElement('span');
+                labelEl.textContent = label;
+                labelEl.style.cssText = `position: absolute; top: 2px; left: 5px; color: white; background: rgba(0,0,0,0.5); padding: 2px 4px; font-size: 12px; border-radius: 3px; z-index: 10;`;
+                regionEl.appendChild(labelEl);
+            } else {
+                region.remove();
+            }
+        });
+        
+        // Zoom controls
+        document.getElementById(`${type.charAt(0)}-zoom-in`).addEventListener('click', () => ws.zoom(Number(ws.params.minPxPerSec) + 20));
+        document.getElementById(`${type.charAt(0)}-zoom-out`).addEventListener('click', () => ws.zoom(Number(ws.params.minPxPerSec) - 20));
+    };
+
+    setupPanel('question');
+    setupPanel('control');
+
+    generateButton.addEventListener('click', async () => {
+        if (!appState.question.original_filename || !appState.control.original_filename) {
+            alert('Please load both a Question and a Control audio file.');
+            return;
+        }
+
+        const allAnnotations = {
+            question: Object.values(appState.question.wavesurfer.regions.list).map(r => ({ label: r.data.label, start: r.start, end: r.end })),
+            control: Object.values(appState.control.wavesurfer.regions.list).map(r => ({ label: r.data.label, start: r.start, end: r.end }))
+        };
+        
+        if (allAnnotations.question.length === 0 || allAnnotations.control.length === 0) {
+            alert('Please add at least one annotation to each audio file.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('annotations', JSON.stringify(allAnnotations));
+        formData.append('question_original_filename', appState.question.original_filename);
+        formData.append('control_original_filename', appState.control.original_filename);
+
+        statusArea.textContent = 'Processing... Please wait.';
+        generateButton.disabled = true;
+        generateButton.textContent = 'Working...';
+
+        try {
+            const response = await fetch('/process', { method: 'POST', body: formData });
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'clueword_analysis.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                statusArea.textContent = 'Success! Your download has started.';
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error);
+            }
+        } catch (error) {
+            statusArea.textContent = `Error: ${error.message}`;
+            console.error('Error:', error);
+        } finally {
+            generateButton.disabled = false;
+            generateButton.textContent = 'Generate CLUE WORDS';
+        }
+    });
+});
+Part 4: Running the ApplicationClick "Run": At the top of the Replit window, click the big green Run button.Console Output: The console on the right will show the Python packages being installed and then the Flask server starting up.Webview: A "Webview" tab will automatically open, showing your application. For the best experience, click the "Open in a new tab" icon at the top right of the Webview.Your application is now live and ready to use from the new browser tab.
