@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forensic Clueword Extractor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Load WaveSurfer.js and Regions Plugin from CDN -->
+    <script src="https://unpkg.com/wavesurfer.js@6.6.3/dist/wavesurfer.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@6.6.3/dist/plugin/wavesurfer.regions.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Forensic Clueword Extractor</h1>
+        <p class="subtitle">Professional Audio Analysis Tool for Forensic Investigations</p>
+    </header>
+
+    <main class="container">
+        <!-- Instructions Panel -->
+        <div class="instructions-panel">
+            <h3>Instructions</h3>
+            <ol>
+                <li>Upload question and control audio files</li>
+                <li>Click on waveforms to create annotations</li>
+                <li>Label each annotation with the clueword</li>
+                <li>Generate analysis to extract matching cluewords</li>
+            </ol>
+        </div>
+
+        <!-- Question Audio Panel -->
+        <div class="audio-panel" id="question-panel">
+            <h2>Question Audio</h2>
+            <div class="file-loader">
+                <input type="file" id="question-file-input" accept="audio/*">
+                <label for="question-file-input" class="file-label">Choose File</label>
+                <span id="question-filename" class="filename">No file selected</span>
+            </div>
+            <div id="question-waveform" class="waveform-container"></div>
+            <div class="controls">
+                <div class="zoom-controls">
+                    <button id="q-zoom-in" class="control-btn">Zoom In</button>
+                    <button id="q-zoom-out" class="control-btn">Zoom Out</button>
+                </div>
+                <div class="playback-controls">
+                    <button id="q-play" class="control-btn">Play</button>
+                    <button id="q-pause" class="control-btn">Pause</button>
+                    <button id="q-stop" class="control-btn">Stop</button>
+                </div>
+            </div>
+            <div class="annotations-container">
+                <h3>Question Annotations</h3>
+                <div id="question-annotations" class="annotations-list"></div>
+            </div>
+        </div>
+
+        <!-- Control Audio Panel -->
+        <div class="audio-panel" id="control-panel">
+            <h2>Control Audio</h2>
+            <div class="file-loader">
+                <input type="file" id="control-file-input" accept="audio/*">
+                <label for="control-file-input" class="file-label">Choose File</label>
+                <span id="control-filename" class="filename">No file selected</span>
+            </div>
+            <div id="control-waveform" class="waveform-container"></div>
+            <div class="controls">
+                <div class="zoom-controls">
+                    <button id="c-zoom-in" class="control-btn">Zoom In</button>
+                    <button id="c-zoom-out" class="control-btn">Zoom Out</button>
+                </div>
+                <div class="playback-controls">
+                    <button id="c-play" class="control-btn">Play</button>
+                    <button id="c-pause" class="control-btn">Pause</button>
+                    <button id="c-stop" class="control-btn">Stop</button>
+                </div>
+            </div>
+            <div class="annotations-container">
+                <h3>Control Annotations</h3>
+                <div id="control-annotations" class="annotations-list"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <button id="generate-button" class="generate-btn" disabled>Generate CLUE WORDS</button>
+            <div id="status-area" class="status">Ready - Upload audio files to begin</div>
+        </div>
+    </footer>
+
+    <!-- Loading Modal -->
+    <div id="loading-modal" class="modal">
+        <div class="modal-content">
+            <div class="spinner"></div>
+            <p id="loading-text">Processing...</p>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div id="error-modal" class="modal">
+        <div class="modal-content">
+            <h3>Error</h3>
+            <p id="error-text"></p>
+            <button id="error-close" class="control-btn">Close</button>
+        </div>
+    </div>
+
+    <!-- Annotation Input Modal -->
+    <div id="annotation-modal" class="modal">
+        <div class="modal-content">
+            <h3>Add Clueword Annotation</h3>
+            <form id="annotation-form">
+                <div class="form-group">
+                    <label for="annotation-label">Clueword Label:</label>
+                    <input type="text" id="annotation-label" required placeholder="Enter clueword">
+                </div>
+                <div class="form-group">
+                    <label>Time Range:</label>
+                    <span id="annotation-time-display"></span>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="control-btn primary">Add Annotation</button>
+                    <button type="button" id="annotation-cancel" class="control-btn">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Our custom application logic -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
