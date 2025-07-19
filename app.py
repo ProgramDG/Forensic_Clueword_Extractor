@@ -364,18 +364,11 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count, enabl
             
             doc.add_paragraph()
         
-        # Report metadata
-        doc.add_paragraph(f"Report generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        # Simple separator
         doc.add_paragraph(f"Total Matching Cluewords Found: {matches_count}")
         doc.add_paragraph()
         
-        # Add summary
-        doc.add_heading('Analysis Summary', level=1)
-        doc.add_paragraph(f"This forensic analysis identified {matches_count} matching cluewords between the question and control audio recordings. Each matching clueword has been extracted as separate audio segments for further analysis.")
-        doc.add_paragraph()
-        
         # Add detailed table with new format
-        doc.add_heading('Detailed Analysis', level=1)
         table = doc.add_table(rows=1, cols=7, style='Table Grid')
         table.autofit = False
         

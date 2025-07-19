@@ -799,8 +799,16 @@ async function saveCurrentSession() {
             control_filename: controlOriginalFilename,
             bandpass_enabled: document.getElementById('enable-bandpass').checked,
             annotations: {
-                question: questionAnnotations,
-                control: controlAnnotations
+                question: questionAnnotations.map(ann => ({
+                    label: ann.label,
+                    start: ann.start,
+                    end: ann.end
+                })),
+                control: controlAnnotations.map(ann => ({
+                    label: ann.label,
+                    start: ann.start,
+                    end: ann.end
+                }))
             }
         };
         
