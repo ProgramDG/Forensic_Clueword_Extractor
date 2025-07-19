@@ -26,6 +26,10 @@ Preferred communication style: Simple, everyday language.
 ✓ **NEW: Fixed Word document table format** - removed redundant clueword column from control side
 ✓ **NEW: Standalone EXE creation guide** with PyInstaller, Auto-py-to-exe, and Electron methods
 ✓ **NEW: Professional developer signature** - forensic-themed footer with animated elements and certification seal for Dayanand Gawade
+✓ **NEW: PostgreSQL session management system** - save/load forensic cases with full annotation data
+✓ **NEW: Mouse scroll zoom system** - click to activate waveform, scroll to zoom (replaced zoom buttons)
+✓ **NEW: Fixed local setup scripts** - added Flask-SQLAlchemy dependency for session management
+✓ **NEW: SQLite fallback** - uses local database when PostgreSQL unavailable for offline work
 
 ## System Architecture
 

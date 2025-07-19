@@ -48,6 +48,7 @@ source venv/bin/activate
 ### Step 3: Install Python Dependencies
 ```bash
 pip install Flask==2.3.3
+pip install Flask-SQLAlchemy==3.1.1
 pip install pydub==0.25.1
 pip install python-docx==0.8.11
 pip install gunicorn==21.2.0

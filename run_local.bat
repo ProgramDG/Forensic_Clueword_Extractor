@@ -23,7 +23,7 @@ if errorlevel 1 (
 
 echo.
 echo Installing Python dependencies...
-pip install Flask==2.3.3 pydub==0.25.1 python-docx==0.8.11
+pip install Flask==2.3.3 pydub==0.25.1 python-docx==0.8.11 Flask-SQLAlchemy==3.1.1
 
 echo.
 echo Starting application...
