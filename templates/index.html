@@ -36,6 +36,20 @@
     </header>
 
     <main class="container">
+        <!-- Session Management Panel -->
+        <div class="session-panel">
+            <div class="panel-header">
+                <h3>Session Management</h3>
+                <small class="panel-description">Save and load forensic investigation sessions</small>
+            </div>
+            <div class="session-controls">
+                <button id="save-session-btn" class="control-btn session-btn">💾 Save Session</button>
+                <button id="load-session-btn" class="control-btn session-btn">📂 Load Session</button>
+                <button id="new-session-btn" class="control-btn session-btn">🆕 New Session</button>
+                <span id="session-status" class="session-status"></span>
+            </div>
+        </div>
+
         <!-- Case Information Panel -->
         <div class="case-info-panel">
             <div class="panel-header">
@@ -61,6 +75,15 @@
                     <div class="form-field">
                         <label for="cr-adr-number">C.R./A.D.R. No.</label>
                         <input type="text" id="cr-adr-number" placeholder="Enter C.R./A.D.R. number">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-field">
+                        <label for="speaker-name">Speaker Name</label>
+                        <input type="text" id="speaker-name" placeholder="Enter speaker name">
+                    </div>
+                    <div class="form-field">
+                        <!-- Empty field for symmetry -->
                     </div>
                 </div>
             </div>
@@ -110,16 +133,19 @@
                 <label for="question-file-input" class="file-label">Choose File</label>
                 <span id="question-filename" class="filename">No file selected</span>
             </div>
-            <div id="question-waveform" class="waveform-container"></div>
-            <div class="controls">
-                <div class="zoom-controls">
-                    <button id="q-zoom-in" class="control-btn">Zoom In</button>
-                    <button id="q-zoom-out" class="control-btn">Zoom Out</button>
+            <div id="question-waveform" class="waveform-container" data-active="false">
+                <div class="waveform-overlay">
+                    <div class="zoom-indicator">Scroll to zoom • Click to activate</div>
                 </div>
+            </div>
+            <div class="controls">
                 <div class="playback-controls">
                     <button id="q-play" class="control-btn">Play</button>
                     <button id="q-pause" class="control-btn">Pause</button>
                     <button id="q-stop" class="control-btn">Stop</button>
+                </div>
+                <div class="zoom-status">
+                    <span id="q-zoom-level">Zoom: 1x</span>
                 </div>
             </div>
             <div class="annotations-container">
@@ -136,16 +162,19 @@
                 <label for="control-file-input" class="file-label">Choose File</label>
                 <span id="control-filename" class="filename">No file selected</span>
             </div>
-            <div id="control-waveform" class="waveform-container"></div>
-            <div class="controls">
-                <div class="zoom-controls">
-                    <button id="c-zoom-in" class="control-btn">Zoom In</button>
-                    <button id="c-zoom-out" class="control-btn">Zoom Out</button>
+            <div id="control-waveform" class="waveform-container" data-active="false">
+                <div class="waveform-overlay">
+                    <div class="zoom-indicator">Scroll to zoom • Click to activate</div>
                 </div>
+            </div>
+            <div class="controls">
                 <div class="playback-controls">
                     <button id="c-play" class="control-btn">Play</button>
                     <button id="c-pause" class="control-btn">Pause</button>
                     <button id="c-stop" class="control-btn">Stop</button>
+                </div>
+                <div class="zoom-status">
+                    <span id="c-zoom-level">Zoom: 1x</span>
                 </div>
             </div>
             <div class="annotations-container">
@@ -209,6 +238,60 @@
             </div>
             <div class="signature-line">
                 <div class="chain-of-custody">█▓▒░ DIGITAL CHAIN OF CUSTODY MAINTAINED ░▒▓█</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Management Modals -->
+    <!-- Save Session Modal -->
+    <div id="save-session-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Save Forensic Session</h3>
+                <span class="close" id="close-save-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-field">
+                    <label for="session-name-input">Session Name</label>
+                    <input type="text" id="session-name-input" placeholder="e.g., Case-2025-001-Voice-Analysis">
+                </div>
+                <div class="session-summary">
+                    <p><strong>What will be saved:</strong></p>
+                    <ul>
+                        <li>Case information details</li>
+                        <li>Audio file references</li>
+                        <li>All clueword annotations</li>
+                        <li>Bandpass filter settings</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="confirm-save-session" class="control-btn primary">💾 Save Session</button>
+                <button id="cancel-save-session" class="control-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Session Modal -->
+    <div id="load-session-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>Load Forensic Session</h3>
+                <span class="close" id="close-load-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="sessions-list">
+                    <div class="sessions-header">
+                        <h4>Available Sessions</h4>
+                        <button id="refresh-sessions" class="control-btn small">🔄 Refresh</button>
+                    </div>
+                    <div id="sessions-container" class="sessions-container">
+                        <div class="loading-sessions">Loading sessions...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-load-session" class="control-btn">Cancel</button>
             </div>
         </div>
     </div>

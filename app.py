@@ -5,15 +5,93 @@ import zipfile
 import logging
 from datetime import datetime
 from flask import Flask, render_template, request, send_file, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import DeclarativeBase
 from pydub import AudioSegment
 from docx import Document
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
+class Base(DeclarativeBase):
+    pass
+
+db = SQLAlchemy(model_class=Base)
+
 # Flask App Initialization
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "forensic-clueword-extractor-secret")
+
+# Database configuration  
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL") or "sqlite:///forensic_sessions.db"
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_recycle": 300,
+    "pool_pre_ping": True,
+}
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db.init_app(app)
+
+# Database Model
+class ForensicSession(db.Model):
+    __tablename__ = 'forensic_sessions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    session_name = db.Column(db.String(200), nullable=False)
+    case_number = db.Column(db.String(100))
+    police_station = db.Column(db.String(200))
+    district = db.Column(db.String(100))
+    cr_number = db.Column(db.String(100))
+    speaker_name = db.Column(db.String(200))
+    
+    # Audio file information
+    question_filename = db.Column(db.String(500))
+    control_filename = db.Column(db.String(500))
+    question_file_path = db.Column(db.String(500))
+    control_file_path = db.Column(db.String(500))
+    
+    # Session data
+    annotations_data = db.Column(db.Text)  # JSON string of all annotations
+    bandpass_enabled = db.Column(db.Boolean, default=False)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def set_annotations(self, annotations):
+        """Store annotations as JSON string"""
+        self.annotations_data = json.dumps(annotations)
+    
+    def get_annotations(self):
+        """Retrieve annotations from JSON string"""
+        if self.annotations_data:
+            return json.loads(self.annotations_data)
+        return {"question": [], "control": []}
+    
+    def to_dict(self):
+        """Convert session to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'session_name': self.session_name,
+            'case_number': self.case_number,
+            'police_station': self.police_station,
+            'district': self.district,
+            'cr_number': self.cr_number,
+            'speaker_name': self.speaker_name,
+            'question_filename': self.question_filename,
+            'control_filename': self.control_filename,
+            'annotations': self.get_annotations(),
+            'bandpass_enabled': self.bandpass_enabled,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+# Initialize database tables (only if they don't exist)
+with app.app_context():
+    try:
+        db.create_all()
+    except Exception as e:
+        app.logger.info(f"Tables might already exist: {e}")
+        pass
 
 # Configuration
 # Define paths for file storage
@@ -125,7 +203,8 @@ def process_audio():
             'case_number': request.form.get('case_number', ''),
             'police_station': request.form.get('police_station', ''),
             'district': request.form.get('district', ''),
-            'cr_adr_number': request.form.get('cr_adr_number', '')
+            'cr_adr_number': request.form.get('cr_adr_number', ''),
+            'speaker_name': request.form.get('speaker_name', '')
         }
         
         if not q_original_filename or not c_original_filename:
@@ -271,6 +350,10 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count, enabl
             row.cells[0].text = "C.R./A.D.R. No."
             row.cells[1].text = case_info.get('cr_adr_number', 'N/A')
             
+            row = case_table.add_row()
+            row.cells[0].text = "Speaker Name"
+            row.cells[1].text = case_info.get('speaker_name', 'N/A')
+            
             # Make labels bold
             for row in case_table.rows:
                 for i, cell in enumerate(row.cells):
@@ -395,6 +478,92 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count, enabl
             f.write("Detailed Analysis:\n")
             for item in data:
                 f.write(f"{item}\n")
+
+# Session Management Routes
+@app.route('/api/sessions', methods=['GET'])
+def get_sessions():
+    """Get all saved forensic sessions"""
+    try:
+        sessions = ForensicSession.query.order_by(ForensicSession.updated_at.desc()).all()
+        return jsonify([session.to_dict() for session in sessions])
+    except Exception as e:
+        app.logger.error(f"Error fetching sessions: {str(e)}")
+        return jsonify({'error': 'Failed to fetch sessions'}), 500
+
+@app.route('/api/sessions', methods=['POST'])
+def save_session():
+    """Save a forensic session"""
+    try:
+        data = request.get_json()
+        
+        session_id = data.get('session_id')
+        if session_id:
+            # Update existing session
+            session = ForensicSession.query.get(session_id)
+            if not session:
+                return jsonify({'error': 'Session not found'}), 404
+        else:
+            # Create new session
+            session = ForensicSession()
+        
+        # Update session data
+        session.session_name = data.get('session_name', '')
+        session.case_number = data.get('case_number', '')
+        session.police_station = data.get('police_station', '')
+        session.district = data.get('district', '')
+        session.cr_number = data.get('cr_number', '')
+        session.speaker_name = data.get('speaker_name', '')
+        session.question_filename = data.get('question_filename', '')
+        session.control_filename = data.get('control_filename', '')
+        session.question_file_path = data.get('question_file_path', '')
+        session.control_file_path = data.get('control_file_path', '')
+        session.bandpass_enabled = data.get('bandpass_enabled', False)
+        
+        # Save annotations
+        annotations = data.get('annotations', {"question": [], "control": []})
+        session.set_annotations(annotations)
+        
+        db.session.add(session)
+        db.session.commit()
+        
+        return jsonify(session.to_dict())
+        
+    except Exception as e:
+        app.logger.error(f"Error saving session: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to save session'}), 500
+
+@app.route('/api/sessions/<int:session_id>', methods=['GET'])
+def load_session(session_id):
+    """Load a specific forensic session"""
+    try:
+        session = ForensicSession.query.get(session_id)
+        if not session:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        return jsonify(session.to_dict())
+        
+    except Exception as e:
+        app.logger.error(f"Error loading session: {str(e)}")
+        return jsonify({'error': 'Failed to load session'}), 500
+
+@app.route('/api/sessions/<int:session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    """Delete a forensic session"""
+    try:
+        session = ForensicSession.query.get(session_id)
+        if not session:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        db.session.delete(session)
+        db.session.commit()
+        
+        return jsonify({'message': 'Session deleted successfully'})
+        
+    except Exception as e:
+        app.logger.error(f"Error deleting session: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete session'}), 500
 
 def apply_bandpass_filter(audio_segment, low_freq, high_freq):
     """Apply bandpass filter using FFmpeg"""

@@ -9,6 +9,16 @@ let currentModal = null;
 let pendingRegion = null;
 let pendingPanelType = null;
 
+// Session management variables
+let currentSessionId = null;
+let currentSessionName = '';
+let availableSessions = [];
+
+// Zoom tracking
+let questionZoomLevel = 1;
+let controlZoomLevel = 1;
+let activeWaveform = null;
+
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
@@ -24,6 +34,12 @@ function initializeEventListeners() {
     // Control button listeners
     setupControlButtons();
     
+    // Session management listeners
+    setupSessionListeners();
+    
+    // Waveform activation listeners
+    setupWaveformActivation();
+    
     // Generate button listener
     document.getElementById('generate-button').addEventListener('click', generateClueWords);
     
@@ -31,17 +47,71 @@ function initializeEventListeners() {
     setupModalListeners();
 }
 
+function setupSessionListeners() {
+    document.getElementById('save-session-btn').addEventListener('click', openSaveSessionModal);
+    document.getElementById('load-session-btn').addEventListener('click', openLoadSessionModal);
+    document.getElementById('new-session-btn').addEventListener('click', createNewSession);
+}
+
+function setupWaveformActivation() {
+    const questionContainer = document.getElementById('question-waveform');
+    const controlContainer = document.getElementById('control-waveform');
+    
+    questionContainer.addEventListener('click', () => activateWaveform('question'));
+    controlContainer.addEventListener('click', () => activateWaveform('control'));
+    
+    // Mouse wheel zoom
+    questionContainer.addEventListener('wheel', (e) => handleWheelZoom(e, 'question'), { passive: false });
+    controlContainer.addEventListener('wheel', (e) => handleWheelZoom(e, 'control'), { passive: false });
+}
+
+function activateWaveform(type) {
+    // Deactivate all waveforms
+    document.getElementById('question-waveform').setAttribute('data-active', 'false');
+    document.getElementById('control-waveform').setAttribute('data-active', 'false');
+    
+    // Activate selected waveform
+    document.getElementById(`${type}-waveform`).setAttribute('data-active', 'true');
+    activeWaveform = type;
+    
+    updateStatus(`${type.charAt(0).toUpperCase() + type.slice(1)} waveform activated - Use mouse wheel to zoom`);
+}
+
+function handleWheelZoom(e, type) {
+    if (document.getElementById(`${type}-waveform`).getAttribute('data-active') !== 'true') {
+        return;
+    }
+    
+    e.preventDefault();
+    
+    const wavesurfer = type === 'question' ? questionWaveSurfer : controlWaveSurfer;
+    if (!wavesurfer) return;
+    
+    const delta = e.deltaY > 0 ? 0.8 : 1.25;
+    
+    if (type === 'question') {
+        questionZoomLevel = Math.max(0.1, Math.min(100, questionZoomLevel * delta));
+        updateZoomDisplay('question', questionZoomLevel);
+        wavesurfer.zoom(questionZoomLevel * 10);
+    } else {
+        controlZoomLevel = Math.max(0.1, Math.min(100, controlZoomLevel * delta));
+        updateZoomDisplay('control', controlZoomLevel);
+        wavesurfer.zoom(controlZoomLevel * 10);
+    }
+}
+
+function updateZoomDisplay(type, level) {
+    const displayElement = document.getElementById(`${type === 'question' ? 'q' : 'c'}-zoom-level`);
+    displayElement.textContent = `Zoom: ${level.toFixed(1)}x`;
+}
+
 function setupControlButtons() {
-    // Question controls
-    document.getElementById('q-zoom-in').addEventListener('click', () => zoomWaveform('question', 1.5));
-    document.getElementById('q-zoom-out').addEventListener('click', () => zoomWaveform('question', 0.75));
+    // Question controls (no more zoom buttons)
     document.getElementById('q-play').addEventListener('click', () => playWaveform('question'));
     document.getElementById('q-pause').addEventListener('click', () => pauseWaveform('question'));
     document.getElementById('q-stop').addEventListener('click', () => stopWaveform('question'));
     
-    // Control controls
-    document.getElementById('c-zoom-in').addEventListener('click', () => zoomWaveform('control', 1.5));
-    document.getElementById('c-zoom-out').addEventListener('click', () => zoomWaveform('control', 0.75));
+    // Control controls (no more zoom buttons)
     document.getElementById('c-play').addEventListener('click', () => playWaveform('control'));
     document.getElementById('c-pause').addEventListener('click', () => pauseWaveform('control'));
     document.getElementById('c-stop').addEventListener('click', () => stopWaveform('control'));
@@ -55,11 +125,21 @@ function setupModalListeners() {
     // Error modal
     document.getElementById('error-close').addEventListener('click', closeErrorModal);
     
+    // Session modals
+    document.getElementById('close-save-modal').addEventListener('click', closeSaveSessionModal);
+    document.getElementById('close-load-modal').addEventListener('click', closeLoadSessionModal);
+    document.getElementById('confirm-save-session').addEventListener('click', saveCurrentSession);
+    document.getElementById('cancel-save-session').addEventListener('click', closeSaveSessionModal);
+    document.getElementById('cancel-load-session').addEventListener('click', closeLoadSessionModal);
+    document.getElementById('refresh-sessions').addEventListener('click', loadAvailableSessions);
+    
     // Close modals on backdrop click
     document.addEventListener('click', function(e) {
         if (e.target.classList.contains('modal')) {
             if (e.target.id === 'error-modal') closeErrorModal();
             if (e.target.id === 'annotation-modal') closeAnnotationModal();
+            if (e.target.id === 'save-session-modal') closeSaveSessionModal();
+            if (e.target.id === 'load-session-modal') closeLoadSessionModal();
         }
     });
 }
@@ -385,6 +465,7 @@ async function generateClueWords() {
         formData.append('police_station', document.getElementById('police-station').value || '');
         formData.append('district', document.getElementById('district').value || '');
         formData.append('cr_adr_number', document.getElementById('cr-adr-number').value || '');
+        formData.append('speaker_name', document.getElementById('speaker-name').value || '');
         
         const response = await fetch('/process', {
             method: 'POST',
@@ -508,7 +589,7 @@ function initializeProgressSteps() {
     updateProgressStep(1); // Start with step 1 active
     
     // Add event listeners for case information fields
-    const caseFields = ['case-number', 'police-station', 'district', 'cr-adr-number'];
+    const caseFields = ['case-number', 'police-station', 'district', 'cr-adr-number', 'speaker-name'];
     caseFields.forEach(fieldId => {
         const field = document.getElementById(fieldId);
         field.addEventListener('input', checkCaseInformation);
@@ -520,9 +601,10 @@ function checkCaseInformation() {
     const policeStation = document.getElementById('police-station').value.trim();
     const district = document.getElementById('district').value.trim();
     const crAdrNumber = document.getElementById('cr-adr-number').value.trim();
+    const speakerName = document.getElementById('speaker-name').value.trim();
     
     // Check if at least one field is filled (you can make this more strict if needed)
-    if (caseNumber || policeStation || district || crAdrNumber) {
+    if (caseNumber || policeStation || district || crAdrNumber || speakerName) {
         updateProgressStep(Math.max(getCurrentProgressStep(), 2));
         updateStatus('Case information entered - Ready for audio files');
     }
@@ -594,6 +676,278 @@ function hideProgressBar() {
         progressBar.classList.add('hidden');
         progressFill.style.width = '0%';
     }, 1000);
+}
+
+// Session Management Functions
+
+function openSaveSessionModal() {
+    const modal = document.getElementById('save-session-modal');
+    modal.style.display = 'block';
+    
+    // Pre-fill session name with case number if available
+    const caseNumber = document.getElementById('case-number').value.trim();
+    const sessionNameInput = document.getElementById('session-name-input');
+    if (caseNumber && !sessionNameInput.value) {
+        sessionNameInput.value = `Case-${caseNumber}-${new Date().getFullYear()}`;
+    }
+    sessionNameInput.focus();
+}
+
+function closeSaveSessionModal() {
+    document.getElementById('save-session-modal').style.display = 'none';
+    document.getElementById('session-name-input').value = '';
+}
+
+function openLoadSessionModal() {
+    const modal = document.getElementById('load-session-modal');
+    modal.style.display = 'block';
+    loadAvailableSessions();
+}
+
+function closeLoadSessionModal() {
+    document.getElementById('load-session-modal').style.display = 'none';
+}
+
+async function loadAvailableSessions() {
+    const container = document.getElementById('sessions-container');
+    container.innerHTML = '<div class="loading-sessions">Loading sessions...</div>';
+    
+    try {
+        const response = await fetch('/api/sessions');
+        if (!response.ok) {
+            throw new Error('Failed to load sessions');
+        }
+        
+        const sessions = await response.json();
+        availableSessions = sessions;
+        
+        if (sessions.length === 0) {
+            container.innerHTML = '<div class="no-sessions">No saved sessions found.</div>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        sessions.forEach(session => {
+            const sessionElement = createSessionElement(session);
+            container.appendChild(sessionElement);
+        });
+        
+    } catch (error) {
+        console.error('Error loading sessions:', error);
+        container.innerHTML = '<div class="no-sessions">Error loading sessions. Please try again.</div>';
+    }
+}
+
+function createSessionElement(session) {
+    const div = document.createElement('div');
+    div.className = 'session-item';
+    div.dataset.sessionId = session.id;
+    
+    const createdDate = new Date(session.created_at).toLocaleDateString();
+    const updatedDate = new Date(session.updated_at).toLocaleDateString();
+    
+    div.innerHTML = \`
+        <div class="session-header">
+            <div class="session-name">\${session.session_name}</div>
+            <div class="session-date">Updated: \${updatedDate}</div>
+        </div>
+        <div class="session-details">
+            <div class="session-detail"><strong>Case:</strong> \${session.case_number || 'N/A'}</div>
+            <div class="session-detail"><strong>Station:</strong> \${session.police_station || 'N/A'}</div>
+            <div class="session-detail"><strong>Speaker:</strong> \${session.speaker_name || 'N/A'}</div>
+            <div class="session-detail"><strong>Files:</strong> \${session.question_filename && session.control_filename ? 'Both uploaded' : 'Incomplete'}</div>
+        </div>
+        <div class="session-actions">
+            <button class="session-action-btn load" onclick="loadSession(\${session.id})">📂 Load</button>
+            <button class="session-action-btn delete" onclick="deleteSession(\${session.id})">🗑️ Delete</button>
+        </div>
+    \`;
+    
+    div.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('session-action-btn')) {
+            selectSession(div);
+        }
+    });
+    
+    return div;
+}
+
+function selectSession(element) {
+    document.querySelectorAll('.session-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    element.classList.add('selected');
+}
+
+async function saveCurrentSession() {
+    const sessionName = document.getElementById('session-name-input').value.trim();
+    if (!sessionName) {
+        alert('Please enter a session name');
+        return;
+    }
+    
+    try {
+        const sessionData = {
+            session_id: currentSessionId,
+            session_name: sessionName,
+            case_number: document.getElementById('case-number').value.trim(),
+            police_station: document.getElementById('police-station').value.trim(),
+            district: document.getElementById('district').value.trim(),
+            cr_number: document.getElementById('cr-adr-number').value.trim(),
+            speaker_name: document.getElementById('speaker-name').value.trim(),
+            question_filename: questionOriginalFilename,
+            control_filename: controlOriginalFilename,
+            bandpass_enabled: document.getElementById('enable-bandpass').checked,
+            annotations: {
+                question: questionAnnotations,
+                control: controlAnnotations
+            }
+        };
+        
+        const response = await fetch('/api/sessions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(sessionData)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to save session');
+        }
+        
+        const savedSession = await response.json();
+        currentSessionId = savedSession.id;
+        currentSessionName = savedSession.session_name;
+        
+        updateSessionStatus(\`Session "\${sessionName}" saved successfully\`);
+        closeSaveSessionModal();
+        
+    } catch (error) {
+        console.error('Error saving session:', error);
+        alert('Failed to save session: ' + error.message);
+    }
+}
+
+async function loadSession(sessionId) {
+    try {
+        const response = await fetch(\`/api/sessions/\${sessionId}\`);
+        if (!response.ok) {
+            throw new Error('Failed to load session');
+        }
+        
+        const session = await response.json();
+        
+        // Load case information
+        document.getElementById('case-number').value = session.case_number || '';
+        document.getElementById('police-station').value = session.police_station || '';
+        document.getElementById('district').value = session.district || '';
+        document.getElementById('cr-adr-number').value = session.cr_number || '';
+        document.getElementById('speaker-name').value = session.speaker_name || '';
+        document.getElementById('enable-bandpass').checked = session.bandpass_enabled || false;
+        
+        // Load annotations
+        questionAnnotations = session.annotations.question || [];
+        controlAnnotations = session.annotations.control || [];
+        
+        // Update session tracking
+        currentSessionId = session.id;
+        currentSessionName = session.session_name;
+        
+        // Refresh annotations display if waveforms are loaded
+        if (questionWaveSurfer) {
+            updateAnnotationsList('question', questionAnnotations);
+        }
+        if (controlWaveSurfer) {
+            updateAnnotationsList('control', controlAnnotations);
+        }
+        
+        updateSessionStatus(\`Session "\${session.session_name}" loaded\`);
+        updateProgressStep(2); // Update progress based on loaded data
+        closeLoadSessionModal();
+        
+    } catch (error) {
+        console.error('Error loading session:', error);
+        alert('Failed to load session: ' + error.message);
+    }
+}
+
+async function deleteSession(sessionId) {
+    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(\`/api/sessions/\${sessionId}\`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to delete session');
+        }
+        
+        // Refresh the sessions list
+        loadAvailableSessions();
+        
+        // Clear current session if it was deleted
+        if (currentSessionId === sessionId) {
+            currentSessionId = null;
+            currentSessionName = '';
+            updateSessionStatus('');
+        }
+        
+    } catch (error) {
+        console.error('Error deleting session:', error);
+        alert('Failed to delete session: ' + error.message);
+    }
+}
+
+function createNewSession() {
+    if (confirm('Create a new session? This will clear all current data.')) {
+        // Clear all form data
+        document.getElementById('case-number').value = '';
+        document.getElementById('police-station').value = '';
+        document.getElementById('district').value = '';
+        document.getElementById('cr-adr-number').value = '';
+        document.getElementById('speaker-name').value = '';
+        document.getElementById('enable-bandpass').checked = true;
+        
+        // Clear annotations
+        questionAnnotations = [];
+        controlAnnotations = [];
+        
+        // Clear waveforms
+        if (questionWaveSurfer) {
+            questionWaveSurfer.clearRegions();
+        }
+        if (controlWaveSurfer) {
+            controlWaveSurfer.clearRegions();
+        }
+        
+        // Update annotation lists
+        updateAnnotationsList('question', []);
+        updateAnnotationsList('control', []);
+        
+        // Reset session tracking
+        currentSessionId = null;
+        currentSessionName = '';
+        updateSessionStatus('');
+        
+        // Reset progress
+        updateProgressStep(1);
+        updateStatus('New session created - Enter case information to begin');
+    }
+}
+
+function updateSessionStatus(message) {
+    const statusElement = document.getElementById('session-status');
+    statusElement.textContent = message;
+    
+    if (message) {
+        setTimeout(() => {
+            statusElement.textContent = '';
+        }, 5000);
+    }
 }
 
 // Handle page unload warning if there are unsaved annotations
