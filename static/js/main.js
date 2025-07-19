@@ -103,11 +103,11 @@ async function handleFileUpload(event, panelType) {
         
         updateGenerateButtonState();
         
-        // Check if both files are loaded to advance to step 2
+        // Check if both files are loaded to advance to step 3
         if (questionWaveSurfer && controlWaveSurfer) {
-            updateProgressStep(2);
+            updateProgressStep(3);
         } else {
-            updateProgressStep(1);
+            updateProgressStep(2);
         }
         
         updateStatus(`${panelType.charAt(0).toUpperCase() + panelType.slice(1)} audio loaded successfully`);
@@ -239,7 +239,7 @@ function handleAnnotationSubmit(event) {
     
     closeAnnotationModal();
     updateGenerateButtonState();
-    updateProgressStep(3);
+    updateProgressStep(4);
     updateStatus(`Annotation "${label}" added to ${pendingPanelType || 'audio'}`);
 }
 
@@ -346,6 +346,18 @@ function stopWaveform(panelType) {
 async function generateClueWords() {
     if (!canGenerate()) return;
     
+    // Check if case information is provided
+    const caseNumber = document.getElementById('case-number').value.trim();
+    const policeStation = document.getElementById('police-station').value.trim();
+    const district = document.getElementById('district').value.trim();
+    const crAdrNumber = document.getElementById('cr-adr-number').value.trim();
+    
+    if (!caseNumber && !policeStation && !district && !crAdrNumber) {
+        if (!confirm('No case information provided. Continue with analysis anyway?')) {
+            return;
+        }
+    }
+    
     try {
         const bandpassEnabled = document.getElementById('enable-bandpass').checked;
         showLoading(`Processing annotations and generating cluewords${bandpassEnabled ? ' with bandpass filtering' : ''}...`);
@@ -368,6 +380,12 @@ async function generateClueWords() {
         formData.append('control_original_filename', controlOriginalFilename);
         formData.append('enable_bandpass', bandpassEnabled.toString());
         
+        // Add case information
+        formData.append('case_number', document.getElementById('case-number').value || '');
+        formData.append('police_station', document.getElementById('police-station').value || '');
+        formData.append('district', document.getElementById('district').value || '');
+        formData.append('cr_adr_number', document.getElementById('cr-adr-number').value || '');
+        
         const response = await fetch('/process', {
             method: 'POST',
             body: formData
@@ -389,7 +407,7 @@ async function generateClueWords() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         
-        updateProgressStep(4);
+        updateProgressStep(5);
         updateStatus(`Clueword analysis complete! ${bandpassEnabled ? 'Bandpass filtered files included. ' : ''}Download started.`);
         
     } catch (error) {
@@ -488,6 +506,31 @@ window.addEventListener('resize', function() {
 // Progress step management
 function initializeProgressSteps() {
     updateProgressStep(1); // Start with step 1 active
+    
+    // Add event listeners for case information fields
+    const caseFields = ['case-number', 'police-station', 'district', 'cr-adr-number'];
+    caseFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        field.addEventListener('input', checkCaseInformation);
+    });
+}
+
+function checkCaseInformation() {
+    const caseNumber = document.getElementById('case-number').value.trim();
+    const policeStation = document.getElementById('police-station').value.trim();
+    const district = document.getElementById('district').value.trim();
+    const crAdrNumber = document.getElementById('cr-adr-number').value.trim();
+    
+    // Check if at least one field is filled (you can make this more strict if needed)
+    if (caseNumber || policeStation || district || crAdrNumber) {
+        updateProgressStep(Math.max(getCurrentProgressStep(), 2));
+        updateStatus('Case information entered - Ready for audio files');
+    }
+}
+
+function getCurrentProgressStep() {
+    const activeStep = document.querySelector('.progress-step.active');
+    return activeStep ? parseInt(activeStep.dataset.step) : 1;
 }
 
 function updateProgressStep(step) {

@@ -36,6 +36,36 @@
     </header>
 
     <main class="container">
+        <!-- Case Information Panel -->
+        <div class="case-info-panel">
+            <div class="panel-header">
+                <h3>Case Information</h3>
+                <small class="panel-description">Enter case details for the analysis report</small>
+            </div>
+            <div class="case-form">
+                <div class="form-row">
+                    <div class="form-field">
+                        <label for="case-number">Case No.</label>
+                        <input type="text" id="case-number" placeholder="Enter case number">
+                    </div>
+                    <div class="form-field">
+                        <label for="police-station">Police Station Name</label>
+                        <input type="text" id="police-station" placeholder="Enter police station name">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-field">
+                        <label for="district">District</label>
+                        <input type="text" id="district" placeholder="Enter district name">
+                    </div>
+                    <div class="form-field">
+                        <label for="cr-adr-number">C.R./A.D.R. No.</label>
+                        <input type="text" id="cr-adr-number" placeholder="Enter C.R./A.D.R. number">
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Instructions Panel -->
         <div class="instructions-panel">
             <div class="instructions-header">
@@ -45,23 +75,28 @@
                     <div class="progress-step" data-step="2">2</div>
                     <div class="progress-step" data-step="3">3</div>
                     <div class="progress-step" data-step="4">4</div>
+                    <div class="progress-step" data-step="5">5</div>
                 </div>
             </div>
             <div class="instructions-content">
                 <div class="instruction-step active" data-step="1">
                     <span class="step-number">1</span>
-                    <span class="step-text">Upload question and control audio files (MP3, WAV, M4A supported)</span>
+                    <span class="step-text">Fill in case information for proper documentation</span>
                 </div>
                 <div class="instruction-step" data-step="2">
                     <span class="step-number">2</span>
-                    <span class="step-text">Click and drag on waveforms to create precise annotations</span>
+                    <span class="step-text">Upload question and control audio files (MP3, WAV, M4A supported)</span>
                 </div>
                 <div class="instruction-step" data-step="3">
                     <span class="step-number">3</span>
-                    <span class="step-text">Label each annotation with matching cluewords</span>
+                    <span class="step-text">Click and drag on waveforms to create precise annotations</span>
                 </div>
                 <div class="instruction-step" data-step="4">
                     <span class="step-number">4</span>
+                    <span class="step-text">Label each annotation with matching cluewords</span>
+                </div>
+                <div class="instruction-step" data-step="5">
+                    <span class="step-number">5</span>
                     <span class="step-text">Generate professional analysis with bandpass filtered audio</span>
                 </div>
             </div>

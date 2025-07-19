@@ -120,6 +120,14 @@ def process_audio():
         c_original_filename = request.form.get('control_original_filename')
         enable_bandpass = request.form.get('enable_bandpass', 'true').lower() == 'true'
         
+        # Get case information
+        case_info = {
+            'case_number': request.form.get('case_number', ''),
+            'police_station': request.form.get('police_station', ''),
+            'district': request.form.get('district', ''),
+            'cr_adr_number': request.form.get('cr_adr_number', '')
+        }
+        
         if not q_original_filename or not c_original_filename:
             return jsonify({"error": "Original filenames are required."}), 400
 
@@ -187,7 +195,7 @@ def process_audio():
             return jsonify({"error": "No matching annotations found between question and control files."}), 400
 
         # Create analysis report
-        create_report(report_data, OUTPUT_FOLDER, q_original_filename, c_original_filename, matches_found, enable_bandpass)
+        create_report(report_data, OUTPUT_FOLDER, q_original_filename, c_original_filename, matches_found, enable_bandpass, case_info)
 
         # Create ZIP file
         zip_path = 'clueword_analysis.zip'
@@ -206,13 +214,72 @@ def process_audio():
         app.logger.error(f"Error in process_audio: {str(e)}")
         return jsonify({"error": "An internal server error occurred during processing."}), 500
 
-def create_report(data, output_dir, q_filename, c_filename, matches_count, enable_bandpass=True):
+def create_report(data, output_dir, q_filename, c_filename, matches_count, enable_bandpass=True, case_info=None):
     """Generates a comprehensive .docx report."""
     try:
+        from docx.shared import Inches
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        
         doc = Document()
         
         # Title
-        doc.add_heading('Forensic Clueword Analysis Report', 0)
+        title = doc.add_heading('Clueword Sheet', 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Add page numbers
+        from docx.oxml import parse_xml
+        section = doc.sections[0]
+        header = section.header
+        footer = section.footer
+        
+        # Add page number to footer
+        footer_para = footer.paragraphs[0]
+        footer_para.text = "Page "
+        run = footer_para.runs[0]
+        fldChar1 = parse_xml(r'<w:fldChar w:fldCharType="begin" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
+        run._r.append(fldChar1)
+        
+        instrText = parse_xml(r'<w:instrText xml:space="preserve" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"> PAGE </w:instrText>')
+        run._r.append(instrText)
+        
+        fldChar2 = parse_xml(r'<w:fldChar w:fldCharType="end" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
+        run._r.append(fldChar2)
+        footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Case Information Header (Bold format as requested)
+        if case_info:
+            case_header = doc.add_heading('Header Title:', level=1)
+            case_header.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            
+            # Create case information table
+            case_table = doc.add_table(rows=2, cols=2)
+            case_table.style = 'Table Grid'
+            
+            # Row 1
+            case_table.cell(0, 0).text = "Case No."
+            case_table.cell(0, 1).text = case_info.get('case_number', 'N/A')
+            case_table.cell(1, 0).text = "Police Station Name"
+            case_table.cell(1, 1).text = case_info.get('police_station', 'N/A')
+            
+            # Add more rows for district and CR/ADR
+            row = case_table.add_row()
+            row.cells[0].text = "District"
+            row.cells[1].text = case_info.get('district', 'N/A')
+            
+            row = case_table.add_row()
+            row.cells[0].text = "C.R./A.D.R. No."
+            row.cells[1].text = case_info.get('cr_adr_number', 'N/A')
+            
+            # Make labels bold
+            for row in case_table.rows:
+                for i, cell in enumerate(row.cells):
+                    if i == 0:  # First column (labels)
+                        for paragraph in cell.paragraphs:
+                            for run in paragraph.runs:
+                                run.font.bold = True
+            
+            doc.add_paragraph()
         
         # Report metadata
         doc.add_paragraph(f"Report generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
