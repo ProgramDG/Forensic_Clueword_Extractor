@@ -129,6 +129,7 @@ async function initializeWaveform(panelType, audioUrl) {
         responsive: true,
         height: 80,
         normalize: true,
+        minPxPerSec: 50, // Set initial zoom level
         plugins: [
             WaveSurfer.regions.create({
                 regionsMinLength: 0.1,
@@ -300,8 +301,14 @@ function playRegion(region) {
 
 function zoomWaveform(panelType, factor) {
     const wavesurfer = panelType === 'question' ? questionWaveSurfer : controlWaveSurfer;
-    if (wavesurfer) {
-        wavesurfer.zoom(wavesurfer.params.minPxPerSec * factor);
+    if (wavesurfer && wavesurfer.isReady) {
+        const currentZoom = wavesurfer.params.minPxPerSec || 50;
+        const newZoom = Math.max(10, Math.min(1000, currentZoom * factor));
+        wavesurfer.zoom(newZoom);
+        
+        // Update status to show current zoom level
+        const zoomLevel = Math.round((newZoom / 50) * 100);
+        updateStatus(`${panelType.charAt(0).toUpperCase() + panelType.slice(1)} waveform zoom: ${zoomLevel}%`);
     }
 }
 

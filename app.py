@@ -203,8 +203,6 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count):
         
         # Report metadata
         doc.add_paragraph(f"Report generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        doc.add_paragraph(f"Original Question File: {q_filename}")
-        doc.add_paragraph(f"Original Control File: {c_filename}")
         doc.add_paragraph(f"Total Matching Cluewords Found: {matches_count}")
         doc.add_paragraph()
         
@@ -213,36 +211,94 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count):
         doc.add_paragraph(f"This forensic analysis identified {matches_count} matching cluewords between the question and control audio recordings. Each matching clueword has been extracted as separate audio segments for further analysis.")
         doc.add_paragraph()
         
-        # Add detailed table
+        # Add detailed table with new format
         doc.add_heading('Detailed Analysis', level=1)
-        table = doc.add_table(rows=1, cols=5, style='Table Grid')
+        table = doc.add_table(rows=1, cols=8, style='Table Grid')
         table.autofit = False
         
-        # Table headers
+        # Table headers - new format
         hdr_cells = table.rows[0].cells
-        headers = ['Source File', 'Clueword', 'Start Time (ms)', 'End Time (ms)', 'Duration (ms)']
-        for i, header in enumerate(headers):
-            hdr_cells[i].text = header
-            # Make header bold
-            for paragraph in hdr_cells[i].paragraphs:
+        headers = [
+            f'Question File: {q_filename}', 
+            '', 
+            '', 
+            '', 
+            f'Control File: {c_filename}', 
+            '', 
+            '', 
+            ''
+        ]
+        
+        # Merge cells for file headers
+        hdr_cells[0].merge(hdr_cells[3])
+        hdr_cells[4].merge(hdr_cells[7])
+        
+        for i, header in enumerate([f'Question File: {q_filename}', f'Control File: {c_filename}']):
+            cell_idx = 0 if i == 0 else 4
+            hdr_cells[cell_idx].text = header
+            for paragraph in hdr_cells[cell_idx].paragraphs:
                 for run in paragraph.runs:
                     run.font.bold = True
         
-        # Table data
+        # Add subheaders row
+        subhdr_row = table.add_row()
+        subhdr_cells = subhdr_row.cells
+        subheaders = [
+            'Clueword', 
+            'Start (HH:MM:SS:MS)', 
+            'End (HH:MM:SS:MS)', 
+            'Duration (ms)',
+            'Clueword', 
+            'Start (HH:MM:SS:MS)', 
+            'End (HH:MM:SS:MS)', 
+            'Duration (ms)'
+        ]
+        
+        for i, header in enumerate(subheaders):
+            subhdr_cells[i].text = header
+            for paragraph in subhdr_cells[i].paragraphs:
+                for run in paragraph.runs:
+                    run.font.bold = True
+        
+        # Group data by matching cluewords
+        clueword_matches = {}
         for item in data:
-            row_cells = table.add_row().cells
-            for i, val in enumerate(item):
-                if isinstance(val, float):
-                    row_cells[i].text = f"{val:.2f}"
-                else:
-                    row_cells[i].text = str(val)
+            source, label, start_ms, end_ms, duration_ms = item
+            if label not in clueword_matches:
+                clueword_matches[label] = {'question': None, 'control': None}
+            
+            clueword_matches[label][source.lower()] = {
+                'start_ms': start_ms,
+                'end_ms': end_ms,
+                'duration_ms': duration_ms
+            }
+        
+        # Add data rows - one row per matching clueword pair
+        for label, match_data in clueword_matches.items():
+            if match_data['question'] and match_data['control']:
+                row_cells = table.add_row().cells
+                
+                # Question data
+                q_data = match_data['question']
+                row_cells[0].text = label
+                row_cells[1].text = format_time_hhmmssms(q_data['start_ms'])
+                row_cells[2].text = format_time_hhmmssms(q_data['end_ms'])
+                row_cells[3].text = f"{q_data['duration_ms']:.0f}"
+                
+                # Control data
+                c_data = match_data['control']
+                row_cells[4].text = label
+                row_cells[5].text = format_time_hhmmssms(c_data['start_ms'])
+                row_cells[6].text = format_time_hhmmssms(c_data['end_ms'])
+                row_cells[7].text = f"{c_data['duration_ms']:.0f}"
         
         doc.add_paragraph()
         doc.add_heading('Notes', level=1)
         doc.add_paragraph("• All audio segments have been standardized to 44100Hz, mono, 16-bit format")
         doc.add_paragraph("• Matching is performed using case-insensitive label comparison")
-        doc.add_paragraph("• Time values are measured in milliseconds from the beginning of each recording")
+        doc.add_paragraph("• Time values are referenced to the original audio files")
         doc.add_paragraph("• Each clueword directory contains 'question.wav' and 'control.wav' files")
+        doc.add_paragraph("• Duration values are shown in milliseconds")
         
         doc.save(os.path.join(output_dir, "analysis_report.docx"))
         
@@ -258,6 +314,16 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count):
             f.write("Detailed Analysis:\n")
             for item in data:
                 f.write(f"{item}\n")
+
+def format_time_hhmmssms(milliseconds):
+    """Convert milliseconds to HH:MM:SS:MS format"""
+    total_seconds = milliseconds / 1000
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)
+    seconds = int(total_seconds % 60)
+    ms = int(milliseconds % 1000)
+    
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{ms:03d}"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

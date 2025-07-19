@@ -8,6 +8,14 @@ The Forensic Clueword Extractor is a web-based audio analysis tool designed for 
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes (July 19, 2025)
+
+✓ Fixed zoom functionality with proper bounds (10x to 1000x zoom range)
+✓ Improved Word document report format with side-by-side comparison
+✓ Added HH:MM:SS:MS time format for professional forensic reporting
+✓ Enhanced table structure with question and control file headers
+✓ Added zoom level status feedback for better user experience
+
 ## System Architecture
 
 ### Frontend Architecture
