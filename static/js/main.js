@@ -746,22 +746,22 @@ function createSessionElement(session) {
     const createdDate = new Date(session.created_at).toLocaleDateString();
     const updatedDate = new Date(session.updated_at).toLocaleDateString();
     
-    div.innerHTML = \`
+    div.innerHTML = `
         <div class="session-header">
-            <div class="session-name">\${session.session_name}</div>
-            <div class="session-date">Updated: \${updatedDate}</div>
+            <div class="session-name">${session.session_name}</div>
+            <div class="session-date">Updated: ${updatedDate}</div>
         </div>
         <div class="session-details">
-            <div class="session-detail"><strong>Case:</strong> \${session.case_number || 'N/A'}</div>
-            <div class="session-detail"><strong>Station:</strong> \${session.police_station || 'N/A'}</div>
-            <div class="session-detail"><strong>Speaker:</strong> \${session.speaker_name || 'N/A'}</div>
-            <div class="session-detail"><strong>Files:</strong> \${session.question_filename && session.control_filename ? 'Both uploaded' : 'Incomplete'}</div>
+            <div class="session-detail"><strong>Case:</strong> ${session.case_number || 'N/A'}</div>
+            <div class="session-detail"><strong>Station:</strong> ${session.police_station || 'N/A'}</div>
+            <div class="session-detail"><strong>Speaker:</strong> ${session.speaker_name || 'N/A'}</div>
+            <div class="session-detail"><strong>Files:</strong> ${session.question_filename && session.control_filename ? 'Both uploaded' : 'Incomplete'}</div>
         </div>
         <div class="session-actions">
-            <button class="session-action-btn load" onclick="loadSession(\${session.id})">📂 Load</button>
-            <button class="session-action-btn delete" onclick="deleteSession(\${session.id})">🗑️ Delete</button>
+            <button class="session-action-btn load" onclick="loadSession(${session.id})">📂 Load</button>
+            <button class="session-action-btn delete" onclick="deleteSession(${session.id})">🗑️ Delete</button>
         </div>
-    \`;
+    `;
     
     div.addEventListener('click', (e) => {
         if (!e.target.classList.contains('session-action-btn')) {
@@ -820,7 +820,7 @@ async function saveCurrentSession() {
         currentSessionId = savedSession.id;
         currentSessionName = savedSession.session_name;
         
-        updateSessionStatus(\`Session "\${sessionName}" saved successfully\`);
+        updateSessionStatus(`Session "${sessionName}" saved successfully`);
         closeSaveSessionModal();
         
     } catch (error) {
@@ -831,7 +831,7 @@ async function saveCurrentSession() {
 
 async function loadSession(sessionId) {
     try {
-        const response = await fetch(\`/api/sessions/\${sessionId}\`);
+        const response = await fetch(`/api/sessions/${sessionId}`);
         if (!response.ok) {
             throw new Error('Failed to load session');
         }
@@ -862,7 +862,7 @@ async function loadSession(sessionId) {
             updateAnnotationsList('control', controlAnnotations);
         }
         
-        updateSessionStatus(\`Session "\${session.session_name}" loaded\`);
+        updateSessionStatus(`Session "${session.session_name}" loaded`);
         updateProgressStep(2); // Update progress based on loaded data
         closeLoadSessionModal();
         
@@ -878,7 +878,7 @@ async function deleteSession(sessionId) {
     }
     
     try {
-        const response = await fetch(\`/api/sessions/\${sessionId}\`, {
+        const response = await fetch(`/api/sessions/${sessionId}`, {
             method: 'DELETE'
         });
         
