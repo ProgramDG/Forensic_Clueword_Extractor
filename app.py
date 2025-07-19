@@ -293,7 +293,7 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count, enabl
         
         # Add detailed table with new format
         doc.add_heading('Detailed Analysis', level=1)
-        table = doc.add_table(rows=1, cols=8, style='Table Grid')
+        table = doc.add_table(rows=1, cols=7, style='Table Grid')
         table.autofit = False
         
         # Table headers - new format
@@ -305,13 +305,12 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count, enabl
             '', 
             f'Control File: {c_filename}', 
             '', 
-            '', 
             ''
         ]
         
         # Merge cells for file headers
         hdr_cells[0].merge(hdr_cells[3])
-        hdr_cells[4].merge(hdr_cells[7])
+        hdr_cells[4].merge(hdr_cells[6])
         
         for i, header in enumerate([f'Question File: {q_filename}', f'Control File: {c_filename}']):
             cell_idx = 0 if i == 0 else 4
@@ -328,7 +327,6 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count, enabl
             'Start (HH:MM:SS:MS)', 
             'End (HH:MM:SS:MS)', 
             'Duration (ms)',
-            'Clueword', 
             'Start (HH:MM:SS:MS)', 
             'End (HH:MM:SS:MS)', 
             'Duration (ms)'
@@ -365,12 +363,11 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count, enabl
                 row_cells[2].text = format_time_hhmmssms(q_data['end_ms'])
                 row_cells[3].text = f"{q_data['duration_ms']:.0f}"
                 
-                # Control data
+                # Control data (no clueword column - it's already shown in the first column)
                 c_data = match_data['control']
-                row_cells[4].text = label
-                row_cells[5].text = format_time_hhmmssms(c_data['start_ms'])
-                row_cells[6].text = format_time_hhmmssms(c_data['end_ms'])
-                row_cells[7].text = f"{c_data['duration_ms']:.0f}"
+                row_cells[4].text = format_time_hhmmssms(c_data['start_ms'])
+                row_cells[5].text = format_time_hhmmssms(c_data['end_ms'])
+                row_cells[6].text = f"{c_data['duration_ms']:.0f}"
         
         doc.add_paragraph()
         doc.add_heading('Notes', level=1)

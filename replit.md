@@ -23,6 +23,8 @@ Preferred communication style: Simple, everyday language.
 ✓ **NEW: 4-file output per clueword** when bandpass filtering is enabled
 ✓ **NEW: Animated progress bar** during analysis generation
 ✓ **NEW: Local setup scripts** for easy offline deployment
+✓ **NEW: Fixed Word document table format** - removed redundant clueword column from control side
+✓ **NEW: Standalone EXE creation guide** with PyInstaller, Auto-py-to-exe, and Electron methods
 
 ## System Architecture
 
