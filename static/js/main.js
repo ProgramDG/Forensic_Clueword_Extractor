@@ -85,18 +85,22 @@ function handleWheelZoom(e, type) {
     e.preventDefault();
     
     const wavesurfer = type === 'question' ? questionWaveSurfer : controlWaveSurfer;
-    if (!wavesurfer) return;
+    if (!wavesurfer || !wavesurfer.isReady) return;
     
     const delta = e.deltaY > 0 ? 0.8 : 1.25;
     
-    if (type === 'question') {
-        questionZoomLevel = Math.max(0.1, Math.min(100, questionZoomLevel * delta));
-        updateZoomDisplay('question', questionZoomLevel);
-        wavesurfer.zoom(questionZoomLevel * 10);
-    } else {
-        controlZoomLevel = Math.max(0.1, Math.min(100, controlZoomLevel * delta));
-        updateZoomDisplay('control', controlZoomLevel);
-        wavesurfer.zoom(controlZoomLevel * 10);
+    try {
+        if (type === 'question') {
+            questionZoomLevel = Math.max(0.1, Math.min(100, questionZoomLevel * delta));
+            updateZoomDisplay('question', questionZoomLevel);
+            wavesurfer.zoom(questionZoomLevel * 10);
+        } else {
+            controlZoomLevel = Math.max(0.1, Math.min(100, controlZoomLevel * delta));
+            updateZoomDisplay('control', controlZoomLevel);
+            wavesurfer.zoom(controlZoomLevel * 10);
+        }
+    } catch (error) {
+        console.warn('Zoom operation failed:', error);
     }
 }
 
@@ -186,6 +190,13 @@ async function handleFileUpload(event, panelType) {
         // Check if both files are loaded to advance to step 3
         if (questionWaveSurfer && controlWaveSurfer) {
             updateProgressStep(3);
+            
+            // If we have saved annotations, recreate regions
+            if (panelType === 'question' && questionAnnotations.length > 0) {
+                recreateRegionsFromAnnotations('question');
+            } else if (panelType === 'control' && controlAnnotations.length > 0) {
+                recreateRegionsFromAnnotations('control');
+            }
         } else {
             updateProgressStep(2);
         }
@@ -240,7 +251,17 @@ async function initializeWaveform(panelType, audioUrl) {
     // Load audio
     await new Promise((resolve, reject) => {
         wavesurfer.load(audioUrl);
-        wavesurfer.on('ready', resolve);
+        wavesurfer.on('ready', () => {
+            // After waveform is ready, restore any saved annotations
+            setTimeout(() => {
+                if (panelType === 'question' && questionAnnotations.length > 0) {
+                    recreateRegionsFromAnnotations('question');
+                } else if (panelType === 'control' && controlAnnotations.length > 0) {
+                    recreateRegionsFromAnnotations('control');
+                }
+            }, 100); // Small delay to ensure waveform is fully ready
+            resolve();
+        });
         wavesurfer.on('error', reject);
     });
     
@@ -862,17 +883,37 @@ async function loadSession(sessionId) {
         currentSessionId = session.id;
         currentSessionName = session.session_name;
         
-        // Refresh annotations display if waveforms are loaded
+        // Set original filenames from session
+        questionOriginalFilename = session.question_filename || '';
+        controlOriginalFilename = session.control_filename || '';
+        
+        // Refresh annotations display
+        updateAnnotationsDisplay('question');
+        updateAnnotationsDisplay('control');
+        
+        // If we have waveforms loaded, recreate regions
         if (questionWaveSurfer) {
-            updateAnnotationsList('question', questionAnnotations);
+            recreateRegionsFromAnnotations('question');
         }
         if (controlWaveSurfer) {
-            updateAnnotationsList('control', controlAnnotations);
+            recreateRegionsFromAnnotations('control');
+        }
+        
+        // Update progress if files are available
+        if (questionOriginalFilename && controlOriginalFilename) {
+            updateProgressStep(3);
         }
         
         updateSessionStatus(`Session "${session.session_name}" loaded`);
         updateProgressStep(2); // Update progress based on loaded data
         closeLoadSessionModal();
+        
+        // Inform user about audio files
+        if (questionOriginalFilename && controlOriginalFilename) {
+            updateStatus(`Session loaded! Please re-upload your audio files:\nQuestion: ${questionOriginalFilename}\nControl: ${controlOriginalFilename}`);
+        } else {
+            updateStatus('Session loaded - Upload audio files to continue');
+        }
         
     } catch (error) {
         console.error('Error loading session:', error);
@@ -933,8 +974,8 @@ function createNewSession() {
         }
         
         // Update annotation lists
-        updateAnnotationsList('question', []);
-        updateAnnotationsList('control', []);
+        updateAnnotationsDisplay('question');
+        updateAnnotationsDisplay('control');
         
         // Reset session tracking
         currentSessionId = null;
@@ -956,6 +997,35 @@ function updateSessionStatus(message) {
             statusElement.textContent = '';
         }, 5000);
     }
+}
+
+function recreateRegionsFromAnnotations(panelType) {
+    const wavesurfer = panelType === 'question' ? questionWaveSurfer : controlWaveSurfer;
+    const annotations = panelType === 'question' ? questionAnnotations : controlAnnotations;
+    
+    if (!wavesurfer || !annotations) return;
+    
+    // Clear existing regions
+    wavesurfer.clearRegions();
+    
+    // Recreate regions from annotations
+    annotations.forEach(annotation => {
+        try {
+            const region = wavesurfer.addRegion({
+                start: annotation.start,
+                end: annotation.end,
+                color: 'rgba(255, 206, 84, 0.4)',
+                attributes: {
+                    label: annotation.label
+                }
+            });
+            
+            // Update the annotation object with the new region
+            annotation.region = region;
+        } catch (error) {
+            console.warn(`Failed to recreate region for annotation: ${annotation.label}`, error);
+        }
+    });
 }
 
 // Handle page unload warning if there are unsaved annotations
