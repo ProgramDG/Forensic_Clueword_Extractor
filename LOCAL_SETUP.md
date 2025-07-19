@@ -100,10 +100,32 @@ forensic-clueword-extractor/
 ## Usage Instructions
 
 1. **Upload Audio Files**: Select question and control audio files (supports MP3, WAV, M4A, etc.)
-2. **Create Annotations**: Click on waveforms to create regions and label them with cluewords
-3. **Zoom Controls**: Use zoom in/out buttons for detailed waveform analysis
-4. **Generate Analysis**: Click "Generate CLUE WORDS" to create analysis report
-5. **Download Results**: Analysis report and extracted audio segments download as ZIP file
+2. **Create Annotations**: Click and drag on waveforms to create precise regions and label them with cluewords
+3. **Interactive Progress**: Follow the 4-step progress indicator for guided workflow
+4. **Zoom Controls**: Use improved zoom in/out buttons for detailed waveform analysis (10x to 1000x range)
+5. **Bandpass Filter Option**: Enable/disable 400Hz-4000Hz bandpass filtering for enhanced voice clarity
+6. **Generate Analysis**: Click "Generate Analysis" to create professional forensic report
+7. **Download Results**: Analysis report and extracted audio segments (with optional bandpass filtered versions) download as ZIP file
+
+## New Features
+
+### Professional UI Enhancements
+- **Feature badges** highlighting key capabilities (Waveform Analysis, Bandpass Filtering, Professional Reports)
+- **Interactive progress steps** with visual feedback showing current workflow stage
+- **Enhanced visual design** with gradients and modern styling
+- **Bandpass filter option** with toggle control and description
+
+### Audio Processing Improvements
+- **Bandpass filtering** applies 400Hz-4000Hz frequency range for voice enhancement
+- **Optional filtering** can be enabled/disabled via checkbox
+- **4 audio files per clueword** when bandpass enabled: question.wav, control.wav, bpf_question.wav, bpf_control.wav
+- **Improved zoom functionality** with proper bounds and status feedback
+
+### Enhanced Reports
+- **Professional formatting** with side-by-side question/control comparison
+- **HH:MM:SS:MS time format** for forensic standard compliance
+- **Dynamic documentation** noting bandpass filter usage
+- **Comprehensive analysis notes** explaining processing methods
 
 ## Troubleshooting
 

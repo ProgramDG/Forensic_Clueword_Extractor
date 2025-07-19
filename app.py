@@ -118,6 +118,7 @@ def process_audio():
         
         q_original_filename = request.form.get('question_original_filename')
         c_original_filename = request.form.get('control_original_filename')
+        enable_bandpass = request.form.get('enable_bandpass', 'true').lower() == 'true'
         
         if not q_original_filename or not c_original_filename:
             return jsonify({"error": "Original filenames are required."}), 400
@@ -161,6 +162,12 @@ def process_audio():
                 q_end_ms = float(q_ann['end']) * 1000
                 q_seg = q_audio[q_start_ms:q_end_ms].set_channels(1).set_frame_rate(44100)
                 q_seg.export(os.path.join(clueword_dir, "question.wav"), format="wav")
+                
+                # Apply bandpass filter to question segment if enabled (400Hz - 4000Hz)
+                if enable_bandpass:
+                    q_seg_bpf = apply_bandpass_filter(q_seg, 400, 4000)
+                    q_seg_bpf.export(os.path.join(clueword_dir, "bpf_question.wav"), format="wav")
+                
                 report_data.append(["Question", q_ann['label'], q_start_ms, q_end_ms, q_end_ms - q_start_ms])
 
                 # Extract control segment
@@ -168,13 +175,19 @@ def process_audio():
                 c_end_ms = float(c_ann['end']) * 1000
                 c_seg = c_audio[c_start_ms:c_end_ms].set_channels(1).set_frame_rate(44100)
                 c_seg.export(os.path.join(clueword_dir, "control.wav"), format="wav")
+                
+                # Apply bandpass filter to control segment if enabled (400Hz - 4000Hz)
+                if enable_bandpass:
+                    c_seg_bpf = apply_bandpass_filter(c_seg, 400, 4000)
+                    c_seg_bpf.export(os.path.join(clueword_dir, "bpf_control.wav"), format="wav")
+                
                 report_data.append(["Control", c_ann['label'], c_start_ms, c_end_ms, c_end_ms - c_start_ms])
         
         if matches_found == 0:
             return jsonify({"error": "No matching annotations found between question and control files."}), 400
 
         # Create analysis report
-        create_report(report_data, OUTPUT_FOLDER, q_original_filename, c_original_filename, matches_found)
+        create_report(report_data, OUTPUT_FOLDER, q_original_filename, c_original_filename, matches_found, enable_bandpass)
 
         # Create ZIP file
         zip_path = 'clueword_analysis.zip'
@@ -193,7 +206,7 @@ def process_audio():
         app.logger.error(f"Error in process_audio: {str(e)}")
         return jsonify({"error": "An internal server error occurred during processing."}), 500
 
-def create_report(data, output_dir, q_filename, c_filename, matches_count):
+def create_report(data, output_dir, q_filename, c_filename, matches_count, enable_bandpass=True):
     """Generates a comprehensive .docx report."""
     try:
         doc = Document()
@@ -297,7 +310,11 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count):
         doc.add_paragraph("• All audio segments have been standardized to 44100Hz, mono, 16-bit format")
         doc.add_paragraph("• Matching is performed using case-insensitive label comparison")
         doc.add_paragraph("• Time values are referenced to the original audio files")
-        doc.add_paragraph("• Each clueword directory contains 'question.wav' and 'control.wav' files")
+        if enable_bandpass:
+            doc.add_paragraph("• Each clueword directory contains 4 files: question.wav, control.wav, bpf_question.wav, bpf_control.wav")
+            doc.add_paragraph("• BPF (Bandpass Filtered) files use 400Hz-4000Hz frequency range for enhanced voice clarity")
+        else:
+            doc.add_paragraph("• Each clueword directory contains 2 files: question.wav, control.wav")
         doc.add_paragraph("• Duration values are shown in milliseconds")
         
         doc.save(os.path.join(output_dir, "analysis_report.docx"))
@@ -314,6 +331,47 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count):
             f.write("Detailed Analysis:\n")
             for item in data:
                 f.write(f"{item}\n")
+
+def apply_bandpass_filter(audio_segment, low_freq, high_freq):
+    """Apply bandpass filter using FFmpeg"""
+    import tempfile
+    import os
+    
+    try:
+        # Create temporary files
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_input:
+            audio_segment.export(temp_input.name, format='wav')
+            temp_input_path = temp_input.name
+        
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_output:
+            temp_output_path = temp_output.name
+        
+        # Apply bandpass filter using FFmpeg
+        # highpass=400Hz, lowpass=4000Hz
+        filter_cmd = f"highpass=f={low_freq},lowpass=f={high_freq}"
+        
+        import subprocess
+        cmd = [
+            'ffmpeg', '-y', '-i', temp_input_path,
+            '-af', filter_cmd,
+            '-acodec', 'pcm_s16le',
+            temp_output_path
+        ]
+        
+        subprocess.run(cmd, check=True, capture_output=True)
+        
+        # Load filtered audio
+        filtered_audio = AudioSegment.from_wav(temp_output_path)
+        
+        # Clean up temp files
+        os.unlink(temp_input_path)
+        os.unlink(temp_output_path)
+        
+        return filtered_audio
+        
+    except Exception as e:
+        app.logger.warning(f"Bandpass filter failed: {str(e)}, returning original audio")
+        return audio_segment
 
 def format_time_hhmmssms(milliseconds):
     """Convert milliseconds to HH:MM:SS:MS format"""

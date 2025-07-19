@@ -15,6 +15,14 @@ Preferred communication style: Simple, everyday language.
 ✓ Added HH:MM:SS:MS time format for professional forensic reporting
 ✓ Enhanced table structure with question and control file headers
 ✓ Added zoom level status feedback for better user experience
+✓ **NEW: Bandpass filtering (400Hz-4000Hz)** for enhanced voice clarity
+✓ **NEW: Professional UI redesign** with feature badges and progress indicators
+✓ **NEW: Interactive progress steps** showing workflow completion status
+✓ **NEW: Enhanced visual design** with gradients and modern styling
+✓ **NEW: Optional bandpass filter control** with user toggle
+✓ **NEW: 4-file output per clueword** when bandpass filtering is enabled
+✓ **NEW: Animated progress bar** during analysis generation
+✓ **NEW: Local setup scripts** for easy offline deployment
 
 ## System Architecture
 

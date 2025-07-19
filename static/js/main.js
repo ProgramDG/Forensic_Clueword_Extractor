@@ -12,6 +12,7 @@ let pendingPanelType = null;
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
+    initializeProgressSteps();
     updateStatus('Ready - Upload audio files to begin');
 });
 
@@ -101,6 +102,14 @@ async function handleFileUpload(event, panelType) {
         await initializeWaveform(panelType, result.url);
         
         updateGenerateButtonState();
+        
+        // Check if both files are loaded to advance to step 2
+        if (questionWaveSurfer && controlWaveSurfer) {
+            updateProgressStep(2);
+        } else {
+            updateProgressStep(1);
+        }
+        
         updateStatus(`${panelType.charAt(0).toUpperCase() + panelType.slice(1)} audio loaded successfully`);
         
     } catch (error) {
@@ -230,6 +239,7 @@ function handleAnnotationSubmit(event) {
     
     closeAnnotationModal();
     updateGenerateButtonState();
+    updateProgressStep(3);
     updateStatus(`Annotation "${label}" added to ${pendingPanelType || 'audio'}`);
 }
 
@@ -337,7 +347,9 @@ async function generateClueWords() {
     if (!canGenerate()) return;
     
     try {
-        showLoading('Processing annotations and generating cluewords...');
+        const bandpassEnabled = document.getElementById('enable-bandpass').checked;
+        showLoading(`Processing annotations and generating cluewords${bandpassEnabled ? ' with bandpass filtering' : ''}...`);
+        showProgressBar();
         
         const formData = new FormData();
         formData.append('annotations', JSON.stringify({
@@ -354,6 +366,7 @@ async function generateClueWords() {
         }));
         formData.append('question_original_filename', questionOriginalFilename);
         formData.append('control_original_filename', controlOriginalFilename);
+        formData.append('enable_bandpass', bandpassEnabled.toString());
         
         const response = await fetch('/process', {
             method: 'POST',
@@ -376,7 +389,8 @@ async function generateClueWords() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         
-        updateStatus('Clueword analysis complete! Download started.');
+        updateProgressStep(4);
+        updateStatus(`Clueword analysis complete! ${bandpassEnabled ? 'Bandpass filtered files included. ' : ''}Download started.`);
         
     } catch (error) {
         console.error('Error generating cluewords:', error);
@@ -384,6 +398,7 @@ async function generateClueWords() {
         updateStatus('Error during clueword generation', 'error');
     } finally {
         hideLoading();
+        hideProgressBar();
     }
 }
 
@@ -469,6 +484,74 @@ window.addEventListener('resize', function() {
         controlWaveSurfer.drawBuffer();
     }
 });
+
+// Progress step management
+function initializeProgressSteps() {
+    updateProgressStep(1); // Start with step 1 active
+}
+
+function updateProgressStep(step) {
+    // Update progress indicators
+    document.querySelectorAll('.progress-step').forEach((el, index) => {
+        const stepNum = index + 1;
+        el.classList.remove('active', 'completed');
+        
+        if (stepNum < step) {
+            el.classList.add('completed');
+        } else if (stepNum === step) {
+            el.classList.add('active');
+        }
+    });
+    
+    // Update instruction steps
+    document.querySelectorAll('.instruction-step').forEach((el, index) => {
+        const stepNum = index + 1;
+        el.classList.remove('active', 'completed');
+        
+        if (stepNum < step) {
+            el.classList.add('completed');
+        } else if (stepNum === step) {
+            el.classList.add('active');
+        }
+    });
+}
+
+function showProgressBar() {
+    const progressBar = document.getElementById('progress-bar');
+    const progressFill = progressBar.querySelector('.progress-fill');
+    progressBar.classList.remove('hidden');
+    
+    // Animate progress
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress > 90) progress = 90;
+        progressFill.style.width = progress + '%';
+    }, 200);
+    
+    // Store interval for cleanup
+    progressBar.dataset.interval = interval;
+}
+
+function hideProgressBar() {
+    const progressBar = document.getElementById('progress-bar');
+    const progressFill = progressBar.querySelector('.progress-fill');
+    
+    // Complete the progress
+    progressFill.style.width = '100%';
+    
+    // Clear interval
+    if (progressBar.dataset.interval) {
+        clearInterval(progressBar.dataset.interval);
+        delete progressBar.dataset.interval;
+    }
+    
+    // Hide after brief completion display
+    setTimeout(() => {
+        progressBar.classList.add('hidden');
+        progressFill.style.width = '0%';
+    }, 1000);
+}
 
 // Handle page unload warning if there are unsaved annotations
 window.addEventListener('beforeunload', function(e) {

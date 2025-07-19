@@ -13,20 +13,58 @@
 </head>
 <body>
     <header>
-        <h1>Forensic Clueword Extractor</h1>
-        <p class="subtitle">Professional Audio Analysis Tool for Forensic Investigations</p>
+        <div class="header-content">
+            <div class="header-main">
+                <h1>Forensic Clueword Extractor</h1>
+                <p class="subtitle">Professional Audio Analysis Tool for Forensic Investigations</p>
+            </div>
+            <div class="header-features">
+                <div class="feature-badge">
+                    <span class="badge-icon">🎵</span>
+                    <span>Waveform Analysis</span>
+                </div>
+                <div class="feature-badge">
+                    <span class="badge-icon">🔍</span>
+                    <span>Bandpass Filtering</span>
+                </div>
+                <div class="feature-badge">
+                    <span class="badge-icon">📊</span>
+                    <span>Professional Reports</span>
+                </div>
+            </div>
+        </div>
     </header>
 
     <main class="container">
         <!-- Instructions Panel -->
         <div class="instructions-panel">
-            <h3>Instructions</h3>
-            <ol>
-                <li>Upload question and control audio files</li>
-                <li>Click on waveforms to create annotations</li>
-                <li>Label each annotation with the clueword</li>
-                <li>Generate analysis to extract matching cluewords</li>
-            </ol>
+            <div class="instructions-header">
+                <h3>Quick Start Guide</h3>
+                <div class="progress-indicator">
+                    <div class="progress-step active" data-step="1">1</div>
+                    <div class="progress-step" data-step="2">2</div>
+                    <div class="progress-step" data-step="3">3</div>
+                    <div class="progress-step" data-step="4">4</div>
+                </div>
+            </div>
+            <div class="instructions-content">
+                <div class="instruction-step active" data-step="1">
+                    <span class="step-number">1</span>
+                    <span class="step-text">Upload question and control audio files (MP3, WAV, M4A supported)</span>
+                </div>
+                <div class="instruction-step" data-step="2">
+                    <span class="step-number">2</span>
+                    <span class="step-text">Click and drag on waveforms to create precise annotations</span>
+                </div>
+                <div class="instruction-step" data-step="3">
+                    <span class="step-number">3</span>
+                    <span class="step-text">Label each annotation with matching cluewords</span>
+                </div>
+                <div class="instruction-step" data-step="4">
+                    <span class="step-number">4</span>
+                    <span class="step-text">Generate professional analysis with bandpass filtered audio</span>
+                </div>
+            </div>
         </div>
 
         <!-- Question Audio Panel -->
@@ -84,8 +122,28 @@
 
     <footer>
         <div class="footer-content">
-            <button id="generate-button" class="generate-btn" disabled>Generate CLUE WORDS</button>
-            <div id="status-area" class="status">Ready - Upload audio files to begin</div>
+            <div class="analysis-options">
+                <div class="option-group">
+                    <label class="option-label">
+                        <input type="checkbox" id="enable-bandpass" checked>
+                        <span class="checkmark"></span>
+                        Enable Bandpass Filter (400Hz-4000Hz)
+                    </label>
+                    <small class="option-description">Enhances voice clarity for better analysis</small>
+                </div>
+            </div>
+            <div class="action-section">
+                <button id="generate-button" class="generate-btn" disabled>
+                    <span class="btn-icon">🎯</span>
+                    Generate Analysis
+                </button>
+                <div class="status-container">
+                    <div id="status-area" class="status">Ready - Upload audio files to begin</div>
+                    <div id="progress-bar" class="progress-bar hidden">
+                        <div class="progress-fill"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </footer>
 
