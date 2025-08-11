@@ -8,6 +8,14 @@ let controlOriginalFilename = '';
 let currentModal = null;
 let pendingRegion = null;
 let pendingPanelType = null;
+let lastClickedTime = { question: 0, control: 0 };
+
+// New variables for pending regions that need naming
+let pendingRegions = { question: [], control: [] };
+
+// Zoom slider variables
+let questionZoomSlider = null;
+let controlZoomSlider = null;
 
 // Session management variables
 let currentSessionId = null;
@@ -60,9 +68,37 @@ function setupWaveformActivation() {
     questionContainer.addEventListener('click', () => activateWaveform('question'));
     controlContainer.addEventListener('click', () => activateWaveform('control'));
     
-    // Mouse wheel zoom
-    questionContainer.addEventListener('wheel', (e) => handleWheelZoom(e, 'question'), { passive: false });
-    controlContainer.addEventListener('wheel', (e) => handleWheelZoom(e, 'control'), { passive: false });
+    // Enhanced mouse wheel zoom with better event handling
+    setupZoomHandlers(questionContainer, 'question');
+    setupZoomHandlers(controlContainer, 'control');
+}
+
+function setupZoomHandlers(container, type) {
+    // Remove any existing wheel listeners to prevent duplicates
+    container.removeEventListener('wheel', container._zoomHandler);
+    
+    // Create a new zoom handler
+    container._zoomHandler = (e) => handleWheelZoom(e, type);
+    
+    // Add the wheel listener with proper options
+    container.addEventListener('wheel', container._zoomHandler, { 
+        passive: false, 
+        capture: true 
+    });
+    
+    // Also add wheel listener to the document for better coverage
+    document.addEventListener('wheel', (e) => {
+        // Check if the mouse is over the container
+        const rect = container.getBoundingClientRect();
+        const isOverContainer = e.clientX >= rect.left && 
+                               e.clientX <= rect.right && 
+                               e.clientY >= rect.top && 
+                               e.clientY <= rect.bottom;
+        
+        if (isOverContainer && container.getAttribute('data-active') === 'true') {
+            handleWheelZoom(e, type);
+        }
+    }, { passive: false });
 }
 
 function activateWaveform(type) {
@@ -71,54 +107,233 @@ function activateWaveform(type) {
     document.getElementById('control-waveform').setAttribute('data-active', 'false');
     
     // Activate selected waveform
-    document.getElementById(`${type}-waveform`).setAttribute('data-active', 'true');
+    const container = document.getElementById(`${type}-waveform`);
+    container.setAttribute('data-active', 'true');
     activeWaveform = type;
+    
+    // Ensure container is focusable and focused for keyboard events
+    container.setAttribute('tabindex', '0');
+    container.focus();
+    
+    // Reinitialize zoom handlers for the active waveform
+    setupZoomHandlers(container, type);
     
     updateStatus(`${type.charAt(0).toUpperCase() + type.slice(1)} waveform activated - Use mouse wheel to zoom`);
 }
 
 function handleWheelZoom(e, type) {
-    if (document.getElementById(`${type}-waveform`).getAttribute('data-active') !== 'true') {
+    // Prevent default scrolling behavior
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Check if waveform is active
+    const container = document.getElementById(`${type}-waveform`);
+    if (!container || container.getAttribute('data-active') !== 'true') {
         return;
     }
     
-    e.preventDefault();
-    
     const wavesurfer = type === 'question' ? questionWaveSurfer : controlWaveSurfer;
-    if (!wavesurfer || !wavesurfer.isReady) return;
+    if (!wavesurfer) {
+        console.warn(`WaveSurfer not available for ${type}`);
+        return;
+    }
     
+    // Check if WaveSurfer is ready
+    if (!wavesurfer.isReady) {
+        console.warn(`WaveSurfer not ready for ${type}`);
+        return;
+    }
+    
+    // Calculate zoom delta
     const delta = e.deltaY > 0 ? 0.8 : 1.25;
     
     try {
+        let newZoomLevel;
+        
         if (type === 'question') {
             questionZoomLevel = Math.max(0.1, Math.min(100, questionZoomLevel * delta));
-            updateZoomDisplay('question', questionZoomLevel);
-            wavesurfer.zoom(questionZoomLevel * 10);
+            newZoomLevel = questionZoomLevel;
         } else {
             controlZoomLevel = Math.max(0.1, Math.min(100, controlZoomLevel * delta));
-            updateZoomDisplay('control', controlZoomLevel);
-            wavesurfer.zoom(controlZoomLevel * 10);
+            newZoomLevel = controlZoomLevel;
         }
+        
+        // Update zoom display
+        updateZoomDisplay(type, newZoomLevel);
+        
+        // Apply zoom using multiple methods for better compatibility
+        const zoomValue = newZoomLevel * 10;
+        
+        // Method 1: Try the zoom method
+        if (typeof wavesurfer.zoom === 'function') {
+            wavesurfer.zoom(zoomValue);
+        }
+        // Method 2: Try setting minPxPerSec
+        else if (typeof wavesurfer.setMinPxPerSec === 'function') {
+            wavesurfer.setMinPxPerSec(zoomValue);
+        }
+        // Method 3: Try setting zoom level directly
+        else if (wavesurfer.params) {
+            wavesurfer.params.minPxPerSec = zoomValue;
+            wavesurfer.drawBuffer();
+        }
+        
+        // Update status to show zoom level
+        updateStatus(`${type.charAt(0).toUpperCase() + type.slice(1)} zoom: ${newZoomLevel.toFixed(1)}x`);
+        
     } catch (error) {
         console.warn('Zoom operation failed:', error);
+        updateStatus(`Zoom failed for ${type} waveform`, 'error');
     }
 }
 
 function updateZoomDisplay(type, level) {
     const displayElement = document.getElementById(`${type === 'question' ? 'q' : 'c'}-zoom-level`);
     displayElement.textContent = `Zoom: ${level.toFixed(1)}x`;
+    
+    // Update zoom slider if it exists
+    const slider = type === 'question' ? questionZoomSlider : controlZoomSlider;
+    if (slider) {
+        slider.value = level;
+    }
+}
+
+function createZoomSlider(type) {
+    const container = document.getElementById(`${type}-waveform`);
+    if (!container) return;
+    
+    // Remove existing zoom slider if any
+    const existingSlider = container.querySelector('.zoom-slider');
+    if (existingSlider) {
+        existingSlider.remove();
+    }
+    
+    // Create zoom slider container
+    const sliderContainer = document.createElement('div');
+    sliderContainer.className = 'zoom-slider-container';
+    
+    // Create zoom slider
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0.1';
+    slider.max = '100';
+    slider.step = '0.1';
+    slider.value = type === 'question' ? questionZoomLevel : controlZoomLevel;
+    slider.className = 'zoom-slider';
+    slider.id = `${type}-zoom-slider`;
+    
+    // Create zoom labels
+    const zoomOutLabel = document.createElement('span');
+    zoomOutLabel.className = 'zoom-label zoom-out';
+    zoomOutLabel.textContent = '−';
+    zoomOutLabel.title = 'Zoom Out';
+    
+    const zoomInLabel = document.createElement('span');
+    zoomInLabel.className = 'zoom-label zoom-in';
+    zoomInLabel.textContent = '+';
+    zoomInLabel.title = 'Zoom In';
+    
+    // Create zoom value display
+    const zoomValue = document.createElement('span');
+    zoomValue.className = 'zoom-value';
+    zoomValue.textContent = `${slider.value}x`;
+    
+    // Assemble the slider container
+    sliderContainer.appendChild(zoomOutLabel);
+    sliderContainer.appendChild(slider);
+    sliderContainer.appendChild(zoomInLabel);
+    sliderContainer.appendChild(zoomValue);
+    
+    // Add to waveform container
+    container.appendChild(sliderContainer);
+    
+    // Store slider reference
+    if (type === 'question') {
+        questionZoomSlider = slider;
+    } else {
+        controlZoomSlider = slider;
+    }
+    
+    // Add event listener
+    slider.addEventListener('input', (e) => {
+        const newZoomLevel = parseFloat(e.target.value);
+        applyZoom(type, newZoomLevel);
+        zoomValue.textContent = `${newZoomLevel.toFixed(1)}x`;
+    });
+    
+    // Add click handlers for zoom buttons
+    zoomOutLabel.addEventListener('click', () => {
+        const currentValue = parseFloat(slider.value);
+        const newValue = Math.max(0.1, currentValue * 0.8);
+        slider.value = newValue;
+        applyZoom(type, newValue);
+        zoomValue.textContent = `${newValue.toFixed(1)}x`;
+    });
+    
+    zoomInLabel.addEventListener('click', () => {
+        const currentValue = parseFloat(slider.value);
+        const newValue = Math.min(100, currentValue * 1.25);
+        slider.value = newValue;
+        applyZoom(type, newValue);
+        zoomValue.textContent = `${newValue.toFixed(1)}x`;
+    });
+}
+
+function applyZoom(type, zoomLevel) {
+    const wavesurfer = type === 'question' ? questionWaveSurfer : controlWaveSurfer;
+    
+    if (!wavesurfer || !wavesurfer.isReady) {
+        console.warn(`WaveSurfer not ready for ${type}`);
+        return;
+    }
+    
+    try {
+        // Update zoom level tracking
+        if (type === 'question') {
+            questionZoomLevel = zoomLevel;
+        } else {
+            controlZoomLevel = zoomLevel;
+        }
+        
+        // Update zoom display
+        updateZoomDisplay(type, zoomLevel);
+        
+        // Apply zoom using multiple methods for better compatibility
+        const zoomValue = zoomLevel * 10;
+        
+        // Method 1: Try the zoom method
+        if (typeof wavesurfer.zoom === 'function') {
+            wavesurfer.zoom(zoomValue);
+        }
+        // Method 2: Try setting minPxPerSec
+        else if (typeof wavesurfer.setMinPxPerSec === 'function') {
+            wavesurfer.setMinPxPerSec(zoomValue);
+        }
+        // Method 3: Try setting zoom level directly
+        else if (wavesurfer.params) {
+            wavesurfer.params.minPxPerSec = zoomValue;
+            wavesurfer.drawBuffer();
+        }
+        
+        // Update status to show zoom level
+        updateStatus(`${type.charAt(0).toUpperCase() + type.slice(1)} zoom: ${zoomLevel.toFixed(1)}x`);
+        
+    } catch (error) {
+        console.warn('Zoom operation failed:', error);
+        updateStatus(`Zoom failed for ${type} waveform`, 'error');
+    }
 }
 
 function setupControlButtons() {
-    // Question controls (no more zoom buttons)
-    document.getElementById('q-play').addEventListener('click', () => playWaveform('question'));
-    document.getElementById('q-pause').addEventListener('click', () => pauseWaveform('question'));
+    // Question controls
+    document.getElementById('q-play-pause').addEventListener('click', () => togglePlayPause('question'));
     document.getElementById('q-stop').addEventListener('click', () => stopWaveform('question'));
+    document.getElementById('q-name-segment').addEventListener('click', () => handleNameSegmentClick('question'));
     
-    // Control controls (no more zoom buttons)
-    document.getElementById('c-play').addEventListener('click', () => playWaveform('control'));
-    document.getElementById('c-pause').addEventListener('click', () => pauseWaveform('control'));
+    // Control controls
+    document.getElementById('c-play-pause').addEventListener('click', () => togglePlayPause('control'));
     document.getElementById('c-stop').addEventListener('click', () => stopWaveform('control'));
+    document.getElementById('c-name-segment').addEventListener('click', () => handleNameSegmentClick('control'));
 }
 
 function setupModalListeners() {
@@ -247,7 +462,15 @@ async function initializeWaveform(panelType, audioUrl) {
     } else {
         controlWaveSurfer = wavesurfer;
     }
-    
+
+    // Helper to update timestamp display
+    function updateTimestamp(current, duration) {
+        const el = document.getElementById(panelType + '-timestamp');
+        if (el) {
+            el.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+        }
+    }
+
     // Load audio
     await new Promise((resolve, reject) => {
         wavesurfer.load(audioUrl);
@@ -260,9 +483,59 @@ async function initializeWaveform(panelType, audioUrl) {
                     recreateRegionsFromAnnotations('control');
                 }
             }, 100); // Small delay to ensure waveform is fully ready
+            
+            // Set initial timestamp
+            updateTimestamp(0, wavesurfer.getDuration() || 0);
+            
+            // Create zoom slider for this waveform
+            createZoomSlider(panelType);
+            
+            // Ensure zoom handlers are properly set up (keep for backward compatibility)
+            const container = document.getElementById(containerId);
+            if (container) {
+                setupZoomHandlers(container, panelType);
+            }
+            
             resolve();
         });
         wavesurfer.on('error', reject);
+    });
+
+    // Update timestamp as audio plays or is seeked
+    wavesurfer.on('audioprocess', () => {
+        updateTimestamp(wavesurfer.getCurrentTime(), wavesurfer.getDuration() || 0);
+    });
+    wavesurfer.on('seek', () => {
+        updateTimestamp(wavesurfer.getCurrentTime(), wavesurfer.getDuration() || 0);
+    });
+    wavesurfer.on('pause', () => {
+        updateTimestamp(wavesurfer.getCurrentTime(), wavesurfer.getDuration() || 0);
+    });
+    wavesurfer.on('finish', () => {
+        updateTimestamp(wavesurfer.getDuration() || 0, wavesurfer.getDuration() || 0);
+        // Reset play/pause button state when audio finishes
+        playingState[panelType] = false;
+        const button = document.getElementById(`${panelType === 'question' ? 'q' : 'c'}-play-pause`);
+        if (button) {
+            button.classList.remove('playing');
+        }
+    });
+    
+    // Handle play/pause state changes
+    wavesurfer.on('play', () => {
+        playingState[panelType] = true;
+        const button = document.getElementById(`${panelType === 'question' ? 'q' : 'c'}-play-pause`);
+        if (button) {
+            button.classList.add('playing');
+        }
+    });
+    
+    wavesurfer.on('pause', () => {
+        playingState[panelType] = false;
+        const button = document.getElementById(`${panelType === 'question' ? 'q' : 'c'}-play-pause`);
+        if (button) {
+            button.classList.remove('playing');
+        }
     });
     
     // Setup region creation
@@ -271,33 +544,82 @@ async function initializeWaveform(panelType, audioUrl) {
         e.stopPropagation();
         playRegion(region);
     });
+
+    // Add region update event listeners
+    wavesurfer.on('region-updated', (region) => {
+        handleRegionUpdate(region, panelType);
+    });
+    wavesurfer.on('region-update-end', (region) => {
+        handleRegionUpdate(region, panelType);
+    });
     
     // Enable region selection
     wavesurfer.enableDragSelection({
         color: getComputedStyle(document.documentElement).getPropertyValue('--region-color')
     });
+
+    // Add click-to-seek and remember last clicked time
+    container.addEventListener('click', function(e) {
+        // Only respond to clicks on the waveform, not overlays or regions
+        if (e.target !== container) return;
+        if (!wavesurfer.isReady) return;
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percent = x / rect.width;
+        const duration = wavesurfer.getDuration();
+        const seekTime = percent * duration;
+        wavesurfer.seekTo(percent);
+        lastClickedTime[panelType] = seekTime;
+    });
 }
 
 function handleRegionCreated(region, panelType) {
-    // Store region info for annotation
-    pendingRegion = region;
-    pendingPanelType = panelType;
+    // Add region to pending regions list instead of immediately showing modal
+    pendingRegions[panelType].push(region);
     
-    // Show annotation modal
-    showAnnotationModal(region.start, region.end);
+    // Update the name segment button state
+    updateNameSegmentButtonState(panelType);
+    
+    // Update status to inform user
+    updateStatus(`${panelType.charAt(0).toUpperCase() + panelType.slice(1)} segment selected - Click "Name Segment" to label it`);
 }
 
-function showAnnotationModal(start, end) {
+function showAnnotationModal(start, end, title = 'Add Clueword Annotation') {
     const modal = document.getElementById('annotation-modal');
+    const modalTitle = modal.querySelector('h3');
     const timeDisplay = document.getElementById('annotation-time-display');
     const labelInput = document.getElementById('annotation-label');
     
+    modalTitle.textContent = title;
     timeDisplay.textContent = `${formatTime(start)} - ${formatTime(end)} (${formatDuration(end - start)})`;
     labelInput.value = '';
     
     modal.style.display = 'block';
     labelInput.focus();
     currentModal = 'annotation';
+}
+
+function handleNameSegmentClick(panelType) {
+    const regions = pendingRegions[panelType];
+    if (regions.length === 0) return;
+    
+    // Get the first pending region
+    const region = regions[0];
+    
+    // Play the selected segment first so user can hear it
+    playRegion(region);
+    
+    // Store region info for annotation
+    pendingRegion = region;
+    pendingPanelType = panelType;
+    
+    // Show annotation modal with information about multiple regions if applicable
+    let modalTitle = 'Add Clueword Annotation';
+    if (regions.length > 1) {
+        modalTitle = `Add Clueword Annotation (${regions.length} segments pending)`;
+    }
+    
+    showAnnotationModal(region.start, region.end, modalTitle);
 }
 
 function handleAnnotationSubmit(event) {
@@ -331,8 +653,20 @@ function handleAnnotationSubmit(event) {
         }
     });
     
+    // Remove the region from pending regions
+    const pendingIndex = pendingRegions[pendingPanelType].indexOf(pendingRegion);
+    if (pendingIndex > -1) {
+        pendingRegions[pendingPanelType].splice(pendingIndex, 1);
+    }
+    
     // Update annotations display
     updateAnnotationsDisplay(pendingPanelType);
+    
+    // Update name segment button state
+    updateNameSegmentButtonState(pendingPanelType);
+    
+    // Store panel type before clearing
+    const panelTypeForStatus = pendingPanelType;
     
     // Clear pending data
     pendingRegion = null;
@@ -341,7 +675,8 @@ function handleAnnotationSubmit(event) {
     closeAnnotationModal();
     updateGenerateButtonState();
     updateProgressStep(4);
-    updateStatus(`Annotation "${label}" added to ${pendingPanelType || 'audio'}`);
+    updateStatus(`Annotation "${label}" added to ${panelTypeForStatus || 'audio'}`);
+    autoSaveSession();
 }
 
 function closeAnnotationModal() {
@@ -350,7 +685,18 @@ function closeAnnotationModal() {
     
     // Remove pending region if cancelled
     if (pendingRegion && pendingPanelType) {
+        // Remove from pending regions list
+        const pendingIndex = pendingRegions[pendingPanelType].indexOf(pendingRegion);
+        if (pendingIndex > -1) {
+            pendingRegions[pendingPanelType].splice(pendingIndex, 1);
+        }
+        
+        // Remove the region from the waveform
         pendingRegion.remove();
+        
+        // Update name segment button state
+        updateNameSegmentButtonState(pendingPanelType);
+        
         pendingRegion = null;
         pendingPanelType = null;
     }
@@ -384,9 +730,15 @@ function updateAnnotationsDisplay(panelType) {
 function playAnnotation(panelType, annotationId) {
     const annotations = panelType === 'question' ? questionAnnotations : controlAnnotations;
     const annotation = annotations.find(ann => ann.id === annotationId);
-    
-    if (annotation && annotation.region) {
-        playRegion(annotation.region);
+    const wavesurfer = panelType === 'question' ? questionWaveSurfer : controlWaveSurfer;
+    if (annotation && wavesurfer) {
+        // Find the region in the current wavesurfer instance that matches the annotation's start/end
+        const region = Object.values(wavesurfer.regions.list).find(r =>
+            Math.abs(r.start - annotation.start) < 0.01 && Math.abs(r.end - annotation.end) < 0.01
+        );
+        if (region) {
+            playRegion(region);
+        }
     }
 }
 
@@ -403,6 +755,7 @@ function deleteAnnotation(panelType, annotationId) {
         updateAnnotationsDisplay(panelType);
         updateGenerateButtonState();
         updateStatus(`Annotation "${annotation.label}" deleted`);
+        autoSaveSession();
     }
 }
 
@@ -423,24 +776,58 @@ function zoomWaveform(panelType, factor) {
     }
 }
 
+// Track playing state for each panel
+let playingState = { question: false, control: false };
+
+function togglePlayPause(panelType) {
+    const wavesurfer = panelType === 'question' ? questionWaveSurfer : controlWaveSurfer;
+    const button = document.getElementById(`${panelType === 'question' ? 'q' : 'c'}-play-pause`);
+    
+    if (!wavesurfer) return;
+    
+    if (playingState[panelType]) {
+        // Currently playing, pause it
+        wavesurfer.pause();
+        playingState[panelType] = false;
+        button.classList.remove('playing');
+    } else {
+        // Currently paused, play it
+        wavesurfer.play();
+        playingState[panelType] = true;
+        button.classList.add('playing');
+    }
+}
+
 function playWaveform(panelType) {
     const wavesurfer = panelType === 'question' ? questionWaveSurfer : controlWaveSurfer;
+    const button = document.getElementById(`${panelType === 'question' ? 'q' : 'c'}-play-pause`);
+    
     if (wavesurfer) {
         wavesurfer.play();
+        playingState[panelType] = true;
+        button.classList.add('playing');
     }
 }
 
 function pauseWaveform(panelType) {
     const wavesurfer = panelType === 'question' ? questionWaveSurfer : controlWaveSurfer;
+    const button = document.getElementById(`${panelType === 'question' ? 'q' : 'c'}-play-pause`);
+    
     if (wavesurfer) {
         wavesurfer.pause();
+        playingState[panelType] = false;
+        button.classList.remove('playing');
     }
 }
 
 function stopWaveform(panelType) {
     const wavesurfer = panelType === 'question' ? questionWaveSurfer : controlWaveSurfer;
+    const button = document.getElementById(`${panelType === 'question' ? 'q' : 'c'}-play-pause`);
+    
     if (wavesurfer) {
         wavesurfer.stop();
+        playingState[panelType] = false;
+        button.classList.remove('playing');
     }
 }
 
@@ -519,6 +906,19 @@ async function generateClueWords() {
     } finally {
         hideLoading();
         hideProgressBar();
+    }
+}
+
+function updateNameSegmentButtonState(panelType) {
+    const button = document.getElementById(`${panelType === 'question' ? 'q' : 'c'}-name-segment`);
+    const hasPendingRegions = pendingRegions[panelType].length > 0;
+    
+    button.disabled = !hasPendingRegions;
+    if (hasPendingRegions) {
+        const count = pendingRegions[panelType].length;
+        button.textContent = `Name Segment${count > 1 ? ` (${count})` : ''}`;
+    } else {
+        button.textContent = 'Name Segment';
     }
 }
 
@@ -862,11 +1262,10 @@ async function loadSession(sessionId) {
     try {
         const response = await fetch(`/api/sessions/${sessionId}`);
         if (!response.ok) {
-            throw new Error('Failed to load session');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || response.statusText || 'Failed to load session');
         }
-        
         const session = await response.json();
-        
         // Load case information
         document.getElementById('case-number').value = session.case_number || '';
         document.getElementById('police-station').value = session.police_station || '';
@@ -874,51 +1273,81 @@ async function loadSession(sessionId) {
         document.getElementById('cr-adr-number').value = session.cr_number || '';
         document.getElementById('speaker-name').value = session.speaker_name || '';
         document.getElementById('enable-bandpass').checked = session.bandpass_enabled || false;
-        
         // Load annotations
         questionAnnotations = session.annotations.question || [];
         controlAnnotations = session.annotations.control || [];
         
+        // Clear any pending regions
+        pendingRegions.question = [];
+        pendingRegions.control = [];
         // Update session tracking
         currentSessionId = session.id;
         currentSessionName = session.session_name;
-        
         // Set original filenames from session
         questionOriginalFilename = session.question_filename || '';
         controlOriginalFilename = session.control_filename || '';
-        
+        // Load audio files if filenames are present
+        if (questionOriginalFilename) {
+            await initializeWaveform('question', `/static/temp_standardized/question_standardized.wav`);
+            document.getElementById('question-filename').textContent = questionOriginalFilename;
+            document.getElementById('question-filename').classList.add('loaded');
+        }
+        if (controlOriginalFilename) {
+            await initializeWaveform('control', `/static/temp_standardized/control_standardized.wav`);
+            document.getElementById('control-filename').textContent = controlOriginalFilename;
+            document.getElementById('control-filename').classList.add('loaded');
+        }
         // Refresh annotations display
         updateAnnotationsDisplay('question');
         updateAnnotationsDisplay('control');
-        
-        // If we have waveforms loaded, recreate regions
-        if (questionWaveSurfer) {
-            recreateRegionsFromAnnotations('question');
-        }
-        if (controlWaveSurfer) {
-            recreateRegionsFromAnnotations('control');
-        }
+        // Reset playing state when loading session
+        playingState = { question: false, control: false };
+        const qButton = document.getElementById('q-play-pause');
+        const cButton = document.getElementById('c-play-pause');
+        if (qButton) qButton.classList.remove('playing');
+        if (cButton) cButton.classList.remove('playing');
         
         // Update progress if files are available
         if (questionOriginalFilename && controlOriginalFilename) {
             updateProgressStep(3);
         }
-        
         updateSessionStatus(`Session "${session.session_name}" loaded`);
         updateProgressStep(2); // Update progress based on loaded data
         closeLoadSessionModal();
-        
-        // Inform user about audio files
-        if (questionOriginalFilename && controlOriginalFilename) {
-            updateStatus(`Session loaded! Please re-upload your audio files:\nQuestion: ${questionOriginalFilename}\nControl: ${controlOriginalFilename}`);
-        } else {
-            updateStatus('Session loaded - Upload audio files to continue');
-        }
-        
     } catch (error) {
         console.error('Error loading session:', error);
         alert('Failed to load session: ' + error.message);
     }
+}
+
+// Auto-save session when annotations change
+function autoSaveSession() {
+    if (!currentSessionId) return;
+    const sessionData = {
+        session_id: currentSessionId,
+        session_name: currentSessionName,
+        case_number: document.getElementById('case-number').value.trim(),
+        police_station: document.getElementById('police-station').value.trim(),
+        district: document.getElementById('district').value.trim(),
+        cr_number: document.getElementById('cr-adr-number').value.trim(),
+        speaker_name: document.getElementById('speaker-name').value.trim(),
+        question_filename: questionOriginalFilename,
+        control_filename: controlOriginalFilename,
+        bandpass_enabled: document.getElementById('enable-bandpass').checked,
+        annotations: {
+            question: questionAnnotations.map(ann => ({ label: ann.label, start: ann.start, end: ann.end })),
+            control: controlAnnotations.map(ann => ({ label: ann.label, start: ann.start, end: ann.end }))
+        }
+    };
+    fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData)
+    }).then(() => {
+        updateSessionStatus('Session auto-saved');
+    }).catch(() => {
+        updateSessionStatus('Auto-save failed', 'error');
+    });
 }
 
 async function deleteSession(sessionId) {
@@ -965,6 +1394,10 @@ function createNewSession() {
         questionAnnotations = [];
         controlAnnotations = [];
         
+        // Clear pending regions
+        pendingRegions.question = [];
+        pendingRegions.control = [];
+        
         // Clear waveforms
         if (questionWaveSurfer) {
             questionWaveSurfer.clearRegions();
@@ -973,14 +1406,29 @@ function createNewSession() {
             controlWaveSurfer.clearRegions();
         }
         
+        // Clear zoom sliders
+        questionZoomSlider = null;
+        controlZoomSlider = null;
+        
         // Update annotation lists
         updateAnnotationsDisplay('question');
         updateAnnotationsDisplay('control');
+        
+        // Update name segment button states
+        updateNameSegmentButtonState('question');
+        updateNameSegmentButtonState('control');
         
         // Reset session tracking
         currentSessionId = null;
         currentSessionName = '';
         updateSessionStatus('');
+        
+        // Reset playing state
+        playingState = { question: false, control: false };
+        const qButton = document.getElementById('q-play-pause');
+        const cButton = document.getElementById('c-play-pause');
+        if (qButton) qButton.classList.remove('playing');
+        if (cButton) cButton.classList.remove('playing');
         
         // Reset progress
         updateProgressStep(1);
@@ -1008,6 +1456,9 @@ function recreateRegionsFromAnnotations(panelType) {
     // Clear existing regions
     wavesurfer.clearRegions();
     
+    // Clear pending regions for this panel type
+    pendingRegions[panelType] = [];
+    
     // Recreate regions from annotations
     annotations.forEach(annotation => {
         try {
@@ -1026,6 +1477,29 @@ function recreateRegionsFromAnnotations(panelType) {
             console.warn(`Failed to recreate region for annotation: ${annotation.label}`, error);
         }
     });
+    
+    // Update name segment button state
+    updateNameSegmentButtonState(panelType);
+    
+    // Recreate zoom slider if waveform is loaded
+    if ((panelType === 'question' && questionWaveSurfer) || 
+        (panelType === 'control' && controlWaveSurfer)) {
+        createZoomSlider(panelType);
+    }
+}
+
+function handleRegionUpdate(region, panelType) {
+    // Find the annotation linked to this region
+    const annotations = panelType === 'question' ? questionAnnotations : controlAnnotations;
+    const annotation = annotations.find(ann => ann.region && ann.region.id === region.id);
+    if (annotation) {
+        annotation.start = region.start;
+        annotation.end = region.end;
+        // Optionally, update label if region label can be changed interactively
+        // annotation.label = region.attributes.label;
+        updateAnnotationsDisplay(panelType);
+        autoSaveSession();
+    }
 }
 
 // Handle page unload warning if there are unsaved annotations
@@ -1034,5 +1508,58 @@ window.addEventListener('beforeunload', function(e) {
         const message = 'You have unsaved annotations. Are you sure you want to leave?';
         e.returnValue = message;
         return message;
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    // Ignore if a modal, input, or textarea is focused
+    const tag = document.activeElement.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || document.activeElement.classList.contains('modal')) return;
+    
+    if (e.code === 'Space' && activeWaveform) {
+        e.preventDefault();
+        let ws = activeWaveform === 'question' ? questionWaveSurfer : controlWaveSurfer;
+        if (ws && ws.isReady) {
+            // Play from last clicked time if set, else from current position
+            const lastTime = lastClickedTime[activeWaveform] || ws.getCurrentTime();
+            ws.setTime(lastTime);
+            ws.play();
+        }
+    }
+    
+    // Keyboard zoom controls
+    if (activeWaveform && (e.code === 'Equal' || e.code === 'Minus')) {
+        e.preventDefault();
+        const zoomFactor = e.code === 'Equal' ? 1.25 : 0.8;
+        const wavesurfer = activeWaveform === 'question' ? questionWaveSurfer : controlWaveSurfer;
+        
+        if (wavesurfer && wavesurfer.isReady) {
+            try {
+                let newZoomLevel;
+                if (activeWaveform === 'question') {
+                    questionZoomLevel = Math.max(0.1, Math.min(100, questionZoomLevel * zoomFactor));
+                    newZoomLevel = questionZoomLevel;
+                } else {
+                    controlZoomLevel = Math.max(0.1, Math.min(100, controlZoomLevel * zoomFactor));
+                    newZoomLevel = controlZoomLevel;
+                }
+                
+                updateZoomDisplay(activeWaveform, newZoomLevel);
+                
+                const zoomValue = newZoomLevel * 10;
+                if (typeof wavesurfer.zoom === 'function') {
+                    wavesurfer.zoom(zoomValue);
+                } else if (typeof wavesurfer.setMinPxPerSec === 'function') {
+                    wavesurfer.setMinPxPerSec(zoomValue);
+                } else if (wavesurfer.params) {
+                    wavesurfer.params.minPxPerSec = zoomValue;
+                    wavesurfer.drawBuffer();
+                }
+                
+                updateStatus(`${activeWaveform.charAt(0).toUpperCase() + activeWaveform.slice(1)} zoom: ${newZoomLevel.toFixed(1)}x`);
+            } catch (error) {
+                console.warn('Keyboard zoom failed:', error);
+            }
+        }
     }
 });

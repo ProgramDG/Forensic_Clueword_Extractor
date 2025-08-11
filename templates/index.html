@@ -35,7 +35,7 @@
         </div>
     </header>
 
-    <main class="container">
+    <main class="container wide-layout">
         <!-- Session Management Panel -->
         <div class="session-panel">
             <div class="panel-header">
@@ -125,61 +125,91 @@
             </div>
         </div>
 
-        <!-- Question Audio Panel -->
-        <div class="audio-panel" id="question-panel">
-            <h2>Question Audio</h2>
-            <div class="file-loader">
-                <input type="file" id="question-file-input" accept="audio/*">
-                <label for="question-file-input" class="file-label">Choose File</label>
-                <span id="question-filename" class="filename">No file selected</span>
-            </div>
-            <div id="question-waveform" class="waveform-container" data-active="false">
-                <div class="waveform-overlay">
-                    <div class="zoom-indicator">Scroll to zoom • Click to activate</div>
+        <!-- Question Audio Row -->
+        <div class="audio-row">
+            <div class="annotations-col">
+                <div class="annotations-container">
+                    <h3>Question Annotations</h3>
+                    <div id="question-annotations" class="annotations-list"></div>
                 </div>
             </div>
-            <div class="controls">
-                <div class="playback-controls">
-                    <button id="q-play" class="control-btn">Play</button>
-                    <button id="q-pause" class="control-btn">Pause</button>
-                    <button id="q-stop" class="control-btn">Stop</button>
+            <div class="waveform-col">
+                <h2>Question Audio</h2>
+                <div class="file-loader">
+                    <input type="file" id="question-file-input" accept="audio/*">
+                    <label for="question-file-input" class="file-label">Choose File</label>
+                    <span id="question-filename" class="filename">No file selected</span>
                 </div>
-                <div class="zoom-status">
-                    <span id="q-zoom-level">Zoom: 1x</span>
+                <div id="question-waveform" class="waveform-container" data-active="false">
+                    <div class="waveform-overlay">
+                        <div class="zoom-indicator">Scroll to zoom • Click to activate</div>
+                    </div>
+                    <div class="zoom-instructions">Mouse wheel or +/- keys to zoom</div>
                 </div>
-            </div>
-            <div class="annotations-container">
-                <h3>Question Annotations</h3>
-                <div id="question-annotations" class="annotations-list"></div>
+                <div id="question-timestamp" class="waveform-timestamp">00:00.00 / 00:00.00</div>
+                <div class="controls">
+                    <div class="playback-controls">
+                        <button id="q-play-pause" class="control-btn play-pause-btn" data-panel="question">
+                            <div class="play-pause-icon">
+                                <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                                <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                                </svg>
+                            </div>
+                        </button>
+                        <button id="q-stop" class="control-btn">Stop</button>
+                        <button id="q-name-segment" class="control-btn" disabled>Name Segment</button>
+                    </div>
+                    <div class="zoom-status">
+                        <span id="q-zoom-level">Zoom: 1x</span>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Control Audio Panel -->
-        <div class="audio-panel" id="control-panel">
-            <h2>Control Audio</h2>
-            <div class="file-loader">
-                <input type="file" id="control-file-input" accept="audio/*">
-                <label for="control-file-input" class="file-label">Choose File</label>
-                <span id="control-filename" class="filename">No file selected</span>
-            </div>
-            <div id="control-waveform" class="waveform-container" data-active="false">
-                <div class="waveform-overlay">
-                    <div class="zoom-indicator">Scroll to zoom • Click to activate</div>
+        <!-- Control Audio Row -->
+        <div class="audio-row">
+            <div class="annotations-col">
+                <div class="annotations-container">
+                    <h3>Control Annotations</h3>
+                    <div id="control-annotations" class="annotations-list"></div>
                 </div>
             </div>
-            <div class="controls">
-                <div class="playback-controls">
-                    <button id="c-play" class="control-btn">Play</button>
-                    <button id="c-pause" class="control-btn">Pause</button>
-                    <button id="c-stop" class="control-btn">Stop</button>
+            <div class="waveform-col">
+                <h2>Control Audio</h2>
+                <div class="file-loader">
+                    <input type="file" id="control-file-input" accept="audio/*">
+                    <label for="control-file-input" class="file-label">Choose File</label>
+                    <span id="control-filename" class="filename">No file selected</span>
                 </div>
-                <div class="zoom-status">
-                    <span id="c-zoom-level">Zoom: 1x</span>
+                <div id="control-waveform" class="waveform-container" data-active="false">
+                    <div class="waveform-overlay">
+                        <div class="zoom-indicator">Scroll to zoom • Click to activate</div>
+                    </div>
+                    <div class="zoom-instructions">Mouse wheel or +/- keys to zoom</div>
                 </div>
-            </div>
-            <div class="annotations-container">
-                <h3>Control Annotations</h3>
-                <div id="control-annotations" class="annotations-list"></div>
+                <div id="control-timestamp" class="waveform-timestamp">00:00.00 / 00:00.00</div>
+                <div class="controls">
+                    <div class="playback-controls">
+                        <button id="c-play-pause" class="control-btn play-pause-btn" data-panel="control">
+                            <div class="play-pause-icon">
+                                <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                                <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                                </svg>
+                            </div>
+                        </button>
+                        <button id="c-stop" class="control-btn">Stop</button>
+                        <button id="c-name-segment" class="control-btn" disabled>Name Segment</button>
+                    </div>
+                    <div class="zoom-status">
+                        <span id="c-zoom-level">Zoom: 1x</span>
+                    </div>
+                </div>
             </div>
         </div>
     </main>

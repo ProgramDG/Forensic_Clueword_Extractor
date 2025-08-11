@@ -445,18 +445,6 @@ def create_report(data, output_dir, q_filename, c_filename, matches_count, enabl
                 row_cells[5].text = format_time_hhmmssms(c_data['end_ms'])
                 row_cells[6].text = f"{c_data['duration_ms']:.0f}"
         
-        doc.add_paragraph()
-        doc.add_heading('Notes', level=1)
-        doc.add_paragraph("• All audio segments have been standardized to 44100Hz, mono, 16-bit format")
-        doc.add_paragraph("• Matching is performed using case-insensitive label comparison")
-        doc.add_paragraph("• Time values are referenced to the original audio files")
-        if enable_bandpass:
-            doc.add_paragraph("• Each clueword directory contains 4 files: question.wav, control.wav, bpf_question.wav, bpf_control.wav")
-            doc.add_paragraph("• BPF (Bandpass Filtered) files use 400Hz-4000Hz frequency range for enhanced voice clarity")
-        else:
-            doc.add_paragraph("• Each clueword directory contains 2 files: question.wav, control.wav")
-        doc.add_paragraph("• Duration values are shown in milliseconds")
-        
         doc.save(os.path.join(output_dir, "analysis_report.docx"))
         
     except Exception as e:
