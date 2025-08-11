@@ -472,12 +472,6 @@ Note: This README summarizes structure and responsibilities; the code files in t
 
 ***
 
-## 📜 License
-
-Add your preferred license here. If help is needed selecting one (MIT, Apache-2.0, GPL-3.0, etc.), share constraints (commercial use, patents, copyleft).
-
-***
-
 ## 👤 Credits
 
 - Author: Dayanand Gawade (Forensic Audio Analysis Expert)
@@ -488,13 +482,3 @@ Add your preferred license here. If help is needed selecting one (MIT, Apache-2.
 
 ***
 
-## 🧩 Extras (available on request)
-
-- 🛡️ Shields badges (build, Python version, license, last commit)
-- 🎞️ Minimal demo GIF of upload → annotate → report
-- 🐳 Dockerfile + docker-compose for PG + app
-- 🧪 CI workflow (GitHub Actions) for linting/tests
-- 📦 Offline assets bundling (no CDN usage)
-- 🎧 Sample dataset and sample generated report template
-
-Tip: For GitHub’s dark theme readability, keep emoji sparing, use code blocks for commands, and prefer flat lists over deep nesting.
